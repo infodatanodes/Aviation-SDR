@@ -6,39 +6,69 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 **GitHub Project:** #8 — `gh project item-list 8 --owner infodatanodes`
 **Integration Target:** Spacenodes Ops Center (air traffic layer on the map dashboard)
 
-## Capabilities (Planned)
+## Capabilities
 
 | Capability | Frequency | Protocol | Status |
 |-----------|-----------|----------|--------|
-| ADS-B tracking | 1090 MHz | Mode S Extended Squitter | readsb installed on Pi, not yet receiving (USB power issue) |
+| ADS-B tracking | 1090 MHz | Mode S Extended Squitter | readsb installed on Pi, tar1090 web map working |
+| VHF Airband | 118-137 MHz | AM voice | **ACTIVE** — RTLSDR-Airband scan mode, 20 DFW freqs, integrated into Spacenodes map |
 | UAT tracking | 978 MHz | Universal Access Transceiver | Not started — US only, <18,000 ft GA aircraft |
 | ACARS decoding | 131.55 MHz | VHF data link | Not started — text messages between aircraft & ground |
-| VHF Airband | 118-137 MHz | AM voice | RTLSDR-Airband cloned on Pi, not built |
 | UHF Military | 225-400 MHz | AM voice | Not started |
 
 ## Hardware (On Pi #2 — pi-scanner, 100.68.206.39)
 
+### Owned
 | Item | Status | Notes |
 |------|--------|-------|
-| RTL-SDR Blog V4 | Owned, on Pi | SN: 00000002, for ADS-B (1090 MHz) |
-| Older RTL-SDR (RTL2838UHIDIR) | Owned, on Pi | Flaky USB — disconnects repeatedly, needs powered hub |
-| D3000 discone antenna | Owned, connected | 25-1300 MHz, connected to both dongles |
-| Powered USB hub | **To order** | Required — 2 dongles brownout Pi USB bus |
+| RTL-SDR Blog V4 (1st) | On Pi | SN: 00000002 |
+| Older RTL-SDR (RTL2838UHIDIR) | On Pi | Flaky USB — retiring once new V4s arrive |
+| D3000 discone antenna | Mounted outside | 25-1300 MHz, on 50ft LMR-400 |
+| 50ft LMR-400 coax (N to SMA) | Connected to D3000 | Low-loss feed to Pi |
+
+### Arriving Today (March 5, 2026)
+| Item | Purpose |
+|------|---------|
+| RTL-SDR Blog V4 x2 | Dedicated dongles: 1 for ADS-B (1090), 1 for VHF airband |
+| Atolla 7-Port Powered USB Hub (5V/4A) | Stable USB power for multiple dongles |
+| RTL-SDR Blog Wideband LNA (Bias-Tee) | +18.7 dB gain to compensate splitter loss |
+
+### Arriving Saturday (March 7-8)
+| Item | Purpose |
+|------|---------|
+| Superbat SMA M-to-M Jumpers (6", 5-pack) | Interconnects for splitter/LNA/dongles |
+| XRDS-RF 2-Way Splitter (3dB, SMA, 50Ω) | Split D3000 signal to ADS-B + airband dongles |
+
+### Arriving Later (eBay, March 6-13)
+| Item | Purpose |
+|------|---------|
+| 3-Way SMA Splitter (RF-MY13, 380-2500 MHz) | Future 3-way split for ADS-B + airband + P25 |
+| Browning BR-6283 (806-866 MHz, 3 dBd, 25") | Dedicated 800 MHz antenna for NTIRN P25 |
+| 50ft LMR-400 (PL259 UHF M-to-M) | Feed line for Browning antenna |
 
 ## Software Installed on Pi
 
 | Software | Status | Notes |
 |----------|--------|-------|
-| readsb v3.16.10 | Installed, enabled | ADS-B decoder — crashes due to USB power issue with 2nd dongle |
-| tar1090 | Install failed | Needs readsb stable first — web map UI |
-| RTLSDR-Airband | Cloned, not built | VHF airband recorder at `/home/pi/RTLSDR-Airband/` |
-| rtl_test/rtl_fm/rtl_power | Installed | Basic RTL-SDR utilities |
+| readsb v3.16.10 | **Working** | ADS-B decoder — rebuilt from source against Blog fork librtlsdr |
+| tar1090 | **Working** | Web map at `http://100.68.206.39/tar1090/` |
+| RTLSDR-Airband | **Active** | VHF airband scan mode — 20 DFW freqs, per-transmission MP3 recording |
+| airband_display.py | **Active** | Curses UI on tty1 — two-panel layout (channels + activity log) |
+| transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
+| rtl_test/rtl_fm/rtl_power | Installed | Blog fork versions at `/usr/local/bin/` |
+| librtlsdr (Blog fork) | Installed | Built from source at `/usr/local/lib/` — required for V4 |
+
+## Resolved Issues
+
+1. **"SDR wedged" crash** — Root cause: `rtl_airband` was auto-starting on boot and claiming the USB device before readsb. Fix: `sudo systemctl disable rtl_airband`.
+2. **Wrong librtlsdr** — Debian's stock `librtlsdr0` doesn't properly support V4's R828D tuner in async mode. Fix: removed Debian package, rebuilt Blog fork from source, rebuilt readsb from source.
+3. **Location set** — `sudo readsb-set-location 32.75 -97.33` (Fort Worth area).
+4. **Older dongle removed** — RTL2838UHIDIR unplugged, USB bus stable.
 
 ## Known Issues
 
-1. **USB bus instability**: Older RTL-SDR dongle repeatedly disconnects/reconnects, destabilizing the bus and causing the V4 to wedge (samples_processed: 0). Fix: unplug older dongle OR use powered USB hub.
-2. **tar1090 install**: Failed because readsb wasn't stable. Retry after USB issue resolved.
-3. **No location set**: Need to run `sudo readsb-set-location <lat> <lon>` for proper distance/map centering.
+1. **DNS on Pi** — Tailscale DNS resolver doesn't forward to public DNS. Fix: manually set `nameserver 8.8.8.8` in `/etc/resolv.conf` (Tailscale may overwrite on restart).
+2. **WiFi instead of Ethernet** — Pi is on WiFi (wlan0). Should use wired Ethernet for stability.
 
 ## Aviation Frequencies — DFW Area
 
@@ -52,37 +82,69 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 - Primary: 131.550 MHz
 - Secondary: 131.450 MHz, 131.475 MHz, 131.725 MHz
 
-### VHF Airband — DFW Airports
+### VHF Airband — Active Monitoring (20 Frequencies)
+Configured in `/usr/local/etc/rtl_airband.conf` on Pi, scan mode.
+
 | Frequency | Service | Airport |
 |-----------|---------|---------|
+| 118.050 | Tower West | DFW |
+| 119.050 | Tower East | DFW |
+| 121.650 | Ground | DFW |
 | 124.150 | ATIS | DFW |
-| 126.550 | Ground | DFW |
-| 123.850 | Tower | DFW |
-| 132.475 | Approach | DFW Regional |
-| 125.800 | ATIS | DAL (Love Field) |
-| 121.500 | Emergency | Universal |
+| 125.025 | Departure | DFW |
+| 126.550 | Clearance | DFW |
+| 127.000 | ATIS | Love Field |
+| 132.922 | Approach | DFW |
+| 133.200 | Approach | DFW |
+| 134.900 | Tower | Love Field |
+| 135.575 | Tower | Alliance |
+| 132.450 | Tower | Meacham |
+| 124.300 | Approach | Regional |
+| 119.200 | Center | Fort Worth |
+| 120.350 | Center | Fort Worth |
+| 127.800 | Center | Fort Worth |
+| 128.250 | Center | Dallas |
+| 121.500 | Emergency (Guard) | Universal |
+| 123.025 | Unicom | GA Airports |
+| 123.450 | Air-to-Air | GA |
+
+**Top channels by activity**: DFW Approach (132.922), Love ATIS (127.000), DFW Departure (125.025)
 
 ### Military
 - 225-400 MHz UHF AM — NAS Fort Worth JRB, Carswell Field
 
 ## Integration with Spacenodes Ops Center
 
-### Current State
-- `ercot_proxy.py` polls airplanes.live API for air traffic data
+### Active — VHF Airband → Map Integration (March 2026)
+1. Pi records VHF airband transmissions as per-transmission MP3s
+2. `transfer_recordings.sh` SCPs MP3s to main PC every 2 min → `C:\ProScan\Recordings\Aviation-SDR\`
+3. `recording_watcher.py` aviation worker picks up files, transcribes with Whisper (aviation-specific prompt)
+4. Callsign extracted: airline+digits ("American 1415"→AAL1415), N-number, or ICAO code
+5. WebSocket broadcasts `aviation_transmission` to map
+6. **Map**: aircraft with matching callsign gets blue glow ring (#00bfff), popup shows ATC Radio section with audio player
+7. Tower frequency transmissions show 📡 marker at airport coordinates
+8. All indicators fade after 10 minutes
+
+**Key files on Spacenodes side**: `recording_watcher.py` (aviation worker), `map.html` (glow + popup), `aviation_log.db` (transmission history)
+**API**: `GET /api/aviation-log?callsign=AAL1415` — query transmission history
+
+**POC results** (30 recordings): Whisper turbo extracted callsigns from 37% (11/30 — 8 clean hits)
+
+### Active — Air Traffic Tracking
+- `ercot_proxy.py` polls airplanes.live API for ADS-B aircraft data
 - Displays aircraft as a layer on the Spacenodes map dashboard
 
-### Target State
-- Replace airplanes.live with local readsb JSON API from Pi #1/Pi #2
+### Future
+- Replace airplanes.live with local readsb JSON API from Pi (when dedicated ADS-B dongle is set up)
 - Fallback to airplanes.live if Pi is unreachable
 - Add ACARS text messages as a data feed (decoded aircraft communications)
-- Correlate ADS-B positions with VHF airband audio (which aircraft is talking)
 - UAT data provides FIS-B weather info — potential weather layer source
 
-### API Endpoint (When Working)
+### readsb API Endpoint
 ```
 http://100.68.206.39/tar1090/data/aircraft.json
 ```
-Same JSON format as airplanes.live — should be near-drop-in replacement.
+Same JSON format as airplanes.live — near-drop-in replacement once dedicated dongle is assigned.
 
 ## NotebookLM Research
 
