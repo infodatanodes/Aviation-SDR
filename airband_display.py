@@ -37,8 +37,8 @@ DONGLE1_CHANNELS = [
 ]
 
 DONGLE2_CHANNELS = [
+    (124300000, "Regional Approach", "124.300"),
     (125025000, "DFW Departure",     "125.025"),
-    (125350000, "Dallas Approach",   "125.350"),
     (126550000, "DFW Clearance",     "126.550"),
 ]
 

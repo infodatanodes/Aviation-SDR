@@ -41,7 +41,7 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | Item | Status | Notes |
 |------|--------|-------|
 | RTL-SDR Blog V4 (SN: 00000001) | **Active** | Dedicated DFW Approach 132.922 MHz |
-| RTL-SDR Blog V4 (SN: 00000002) | **Active** | Scanner — 19 DFW aviation frequencies |
+| RTL-SDR Blog V4 (SN: 00000002) | **Active** | Multichannel — 124.300/125.025/126.550 MHz (centered 125.425) |
 | D3000 discone antenna | Mounted outside | 25-1300 MHz |
 | 50ft LMR-400 coax (N to SMA) | Connected | Low-loss feed from antenna to LNA |
 | RTL-SDR Blog Wideband LNA | **Connected** | +18.7 dB gain, USB powered from hub |
@@ -61,7 +61,7 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | Software | Status | Notes |
 |----------|--------|-------|
 | RTLSDR-Airband (approach) | **Active** | `rtl-airband-approach.service` — dedicated 132.922 MHz, SN:00000001, Icecast `/approach` |
-| RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — multichannel 125.025/125.350/126.550 MHz, SN:00000002, Icecast `/scan` |
+| RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — multichannel 124.300/125.025/126.550 MHz (center 125.425), SN:00000002, Icecast `/scan` |
 | airband_display.py | **Active** | `airband-display.service` — curses UI on tty1, two-panel layout |
 | transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
 | Icecast2 | **Active** | Port 8010 — `/approach` (dedicated) + `/scan` (scanner) mounts |
@@ -85,7 +85,7 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 - **Never use `-e` flag in production** — debug logging writes GB/day to root filesystem
 - **Multichannel mode > scan mode** when using LNA — ~2.3 MHz bandwidth limit per dongle, but no missed transmissions
 - **Pin dongles by serial number**, not index — indices can swap on reboot
-- **Dallas Approach (125.350)** shows zero activity from this location — may need different freq
+- **Dallas Approach (125.350)** showed zero activity — replaced with Regional Approach (124.300)
 - **Dallas Love ATIS (127.000)** is a robot weather loop — exclude from pipeline to avoid wasted Whisper cycles
 - **DFW Clearance (126.550)** has most noise of the monitored channels — candidate for audio filtering
 
