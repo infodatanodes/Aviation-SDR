@@ -61,7 +61,7 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | Software | Status | Notes |
 |----------|--------|-------|
 | RTLSDR-Airband (approach) | **Active** | `rtl-airband-approach.service` — dedicated 132.922 MHz, SN:00000001, Icecast `/approach` |
-| RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — 19 freqs scan mode, SN:00000002, Icecast `/scan` |
+| RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — multichannel 125.025/125.350/126.550 MHz, SN:00000002, Icecast `/scan` |
 | airband_display.py | **Active** | `airband-display.service` — curses UI on tty1, two-panel layout |
 | transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
 | Icecast2 | **Active** | Port 8010 — `/approach` (dedicated) + `/scan` (scanner) mounts |
@@ -76,11 +76,29 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 2. **Wrong librtlsdr** — Debian's stock `librtlsdr0` doesn't properly support V4's R828D tuner in async mode. Fix: removed Debian package, rebuilt Blog fork from source, rebuilt readsb from source.
 3. **Location set** — `sudo readsb-set-location 32.75 -97.33` (Fort Worth area).
 4. **Older dongle removed** — RTL2838UHIDIR unplugged, USB bus stable.
+5. **Scan mode fails with LNA+splitter** — Scan mode hops too fast across frequencies; squelch never opens because dwell time is too short with amplified noise floor. Fix: switched to multichannel mode (dongle stays parked, demodulates all channels simultaneously within ~2.3 MHz bandwidth).
+6. **20GB debug log filling SD card** — `-e` flag on rtl_airband services wrote `/rtl_airband_debug.log` continuously. Fix: removed `-e` flag from both service files. Disk went from 92% to 25%.
+7. **Old rtl-airband.service crash-looping** — Stale original service (18,925 restarts) fighting for device 0. Fix: disabled, replaced by `rtl-airband-approach` and `rtl-airband-scan` services pinned by serial number.
+
+## Lessons Learned
+
+- **Never use `-e` flag in production** — debug logging writes GB/day to root filesystem
+- **Multichannel mode > scan mode** when using LNA — ~2.3 MHz bandwidth limit per dongle, but no missed transmissions
+- **Pin dongles by serial number**, not index — indices can swap on reboot
+- **Dallas Approach (125.350)** shows zero activity from this location — may need different freq
+- **Dallas Love ATIS (127.000)** is a robot weather loop — exclude from pipeline to avoid wasted Whisper cycles
+- **DFW Clearance (126.550)** has most noise of the monitored channels — candidate for audio filtering
+
+## Log Management
+
+- **transfer_logs.sh**: Runs daily 3 AM via cron, transfers CSV/logs to `C:\ProScan\Recordings\Aviation-SDR\logs\` with date stamps, truncates on Pi
+- **transfer_recordings.sh**: Runs every 2 min via cron, SCPs MP3s to main PC, deletes local
 
 ## Known Issues
 
 1. **DNS on Pi** — Tailscale DNS resolver doesn't forward to public DNS. Fix: manually set `nameserver 8.8.8.8` in `/etc/resolv.conf` (Tailscale may overwrite on restart).
 2. **WiFi instead of Ethernet** — Pi is on WiFi (wlan0). Should use wired Ethernet for stability.
+3. **Dallas Approach (125.350) silent** — Zero activity in 1-hour test. May not be active freq for this location.
 
 ## Aviation Frequencies — DFW Area
 
