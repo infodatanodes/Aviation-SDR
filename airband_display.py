@@ -48,10 +48,10 @@ FREQ_TO_MHZ = {hz: mhz for hz, _, mhz in ALL_CHANNELS}
 
 # ── Visual elements ──────────────────────────────────────────────────────
 LOGO = [
-    r"     /\      AVIATION SDR",
-    r"    /  \     DFW AIRBAND",
-    r"   / /\ \    MONITOR",
-    r"  / ____ \   ~~~~~~~~~~~~",
+    r"     /\      SPACENODES",
+    r"    /  \     AVIATION SDR",
+    r"   / /\ \    AIRBAND MONITOR",
+    r"  / ____ \   ~~~~~~~~~~~~~~",
     r" /_/    \_\  Pi-Scanner",
 ]
 
@@ -426,7 +426,7 @@ def draw_display(stdscr):
 
             # ── Title bar ────────────────────────────────────────────
             safe_addstr(stdscr, 0, 0, " " * width, curses.color_pair(7))
-            title_left = f" AVIATION SDR // DFW AIRBAND"
+            title_left = f" SPACENODES // AVIATION SDR AIRBAND MONITOR"
             title_right = f"{now.strftime('%H:%M:%S')}  Up:{uptime} "
             safe_addstr(stdscr, 0, 0, title_left, curses.color_pair(7) | curses.A_BOLD)
             safe_addstr(stdscr, 0, width - len(title_right) - 1, title_right, curses.color_pair(7) | curses.A_BOLD)
