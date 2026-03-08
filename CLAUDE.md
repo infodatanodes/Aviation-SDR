@@ -18,28 +18,38 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 
 ## Hardware (On Pi #2 — pi-scanner, 100.68.206.39)
 
-### Owned
+### RF Signal Chain
+```
+D3000 Discone Antenna (25-1300 MHz, mounted outside)
+        │
+   50ft LMR-400 coax (N to SMA)
+        │
+   RTL-SDR Blog Wideband LNA (+18.7 dB, USB powered from hub)
+        │  (SMA jumper)
+   XRDS-RF 2-Way Splitter (3 dB, SMA, 50Ω)
+        │
+   ┌────┴────┐
+   OUT1      OUT2        (SMA jumpers)
+   │         │
+   V4 #1     V4 #2
+   SN:001    SN:002
+   Approach  Scanner
+   132.922   19 freqs
+```
+
+### Installed Hardware
 | Item | Status | Notes |
 |------|--------|-------|
-| RTL-SDR Blog V4 (1st) | On Pi | SN: 00000002 |
-| Older RTL-SDR (RTL2838UHIDIR) | On Pi | Flaky USB — retiring once new V4s arrive |
-| D3000 discone antenna | Mounted outside | 25-1300 MHz, on 50ft LMR-400 |
-| 50ft LMR-400 coax (N to SMA) | Connected to D3000 | Low-loss feed to Pi |
+| RTL-SDR Blog V4 (SN: 00000001) | **Active** | Dedicated DFW Approach 132.922 MHz |
+| RTL-SDR Blog V4 (SN: 00000002) | **Active** | Scanner — 19 DFW aviation frequencies |
+| D3000 discone antenna | Mounted outside | 25-1300 MHz |
+| 50ft LMR-400 coax (N to SMA) | Connected | Low-loss feed from antenna to LNA |
+| RTL-SDR Blog Wideband LNA | **Connected** | +18.7 dB gain, USB powered from hub |
+| XRDS-RF 2-Way Splitter | **Connected** | 3 dB split, feeds both dongles from LNA |
+| Superbat SMA M-to-M Jumpers (6") | **Connected** | LNA→splitter, splitter→dongles |
+| Atolla 7-Port Powered USB Hub (5V/4A) | **Connected** | Powers dongles + LNA USB |
 
-### Arriving Today (March 5, 2026)
-| Item | Purpose |
-|------|---------|
-| RTL-SDR Blog V4 x2 | Dedicated dongles: 1 for ADS-B (1090), 1 for VHF airband |
-| Atolla 7-Port Powered USB Hub (5V/4A) | Stable USB power for multiple dongles |
-| RTL-SDR Blog Wideband LNA (Bias-Tee) | +18.7 dB gain to compensate splitter loss |
-
-### Arriving Saturday (March 7-8)
-| Item | Purpose |
-|------|---------|
-| Superbat SMA M-to-M Jumpers (6", 5-pack) | Interconnects for splitter/LNA/dongles |
-| XRDS-RF 2-Way Splitter (3dB, SMA, 50Ω) | Split D3000 signal to ADS-B + airband dongles |
-
-### Arriving Later (eBay, March 6-13)
+### Arriving (eBay, March 6-13)
 | Item | Purpose |
 |------|---------|
 | 3-Way SMA Splitter (RF-MY13, 380-2500 MHz) | Future 3-way split for ADS-B + airband + P25 |
@@ -50,11 +60,13 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 
 | Software | Status | Notes |
 |----------|--------|-------|
-| readsb v3.16.10 | **Working** | ADS-B decoder — rebuilt from source against Blog fork librtlsdr |
-| tar1090 | **Working** | Web map at `http://100.68.206.39/tar1090/` |
-| RTLSDR-Airband | **Active** | VHF airband scan mode — 20 DFW freqs, per-transmission MP3 recording |
-| airband_display.py | **Active** | Curses UI on tty1 — two-panel layout (channels + activity log) |
+| RTLSDR-Airband (approach) | **Active** | `rtl-airband-approach.service` — dedicated 132.922 MHz, SN:00000001, Icecast `/approach` |
+| RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — 19 freqs scan mode, SN:00000002, Icecast `/scan` |
+| airband_display.py | **Active** | `airband-display.service` — curses UI on tty1, two-panel layout |
 | transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
+| Icecast2 | **Active** | Port 8010 — `/approach` (dedicated) + `/scan` (scanner) mounts |
+| readsb v3.16.10 | Installed (disabled) | ADS-B decoder — no dedicated dongle assigned yet |
+| tar1090 | Running (stale) | Web map at `http://100.68.206.39/tar1090/` — reads from readsb (currently inactive) |
 | rtl_test/rtl_fm/rtl_power | Installed | Blog fork versions at `/usr/local/bin/` |
 | librtlsdr (Blog fork) | Installed | Built from source at `/usr/local/lib/` — required for V4 |
 
