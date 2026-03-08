@@ -3,8 +3,8 @@
 airband_display.py — RTLSDR-Airband companion display + file manager
 
 Two-panel layout:
-  LEFT:  All monitored frequencies with names
-  RIGHT: Scrolling activity log (frequency, time, duration)
+  LEFT:  Dongle 1 & Dongle 2 frequency lists with hits and last activity
+  RIGHT: Scrolling activity log (time, frequency, channel, duration)
 
 Watches ~/closecall/recordings/ for new MP3 files from rtl_airband,
 renames them, logs to CSV, updates status JSON.
@@ -32,11 +32,24 @@ STATUS_JSON = HOME / "closecall" / "listener_status.json"
 EVENT_LOG = HOME / "closecall" / "airband_events.log"
 STATS_FILE = HOME / "closecall" / "airband_stats.txt"
 
-# ── Channel map ──────────────────────────────────────────────────────────
-CHANNELS = [    (118050000, "DFW Tower West",    "118.050"),    (118092000, "DFW Tower Area",    "118.092"),    (119050000, "DFW Tower East",    "119.050"),    (120150000, "Alliance Approach", "120.150"),    (121500000, "Emergency Guard",   "121.500"),    (121650000, "DFW Ground",        "121.650"),    (122750000, "Heli Advisory",     "122.750"),    (122900000, "Multicom",          "122.900"),    (123025000, "Unicom",            "123.025"),    (123050000, "Heli Air-to-Air",   "123.050"),    (123875000, "DFW Approach South","123.875"),    (124150000, "DFW Approach North","124.150"),    (125025000, "DFW Departure",     "125.025"),    (125350000, "Dallas Approach",   "125.350"),    (126550000, "DFW Clearance",     "126.550"),    (127000000, "Dallas Love ATIS",  "127.000"),    (128250000, "Fort Worth Center", "128.250"),    (132450000, "Meacham Tower",     "132.450"),    (132922000, "DFW Approach",      "132.922"),    (132963000, "DFW Approach 2",    "132.963"),    (132984000, "DFW Approach 3",    "132.984"),    (134900000, "Love Field Tower",  "134.900"),    (135050000, "DFW ATIS",          "135.050"),    (135575000, "Alliance Tower",    "135.575"),]
+# ── Dongle assignments ───────────────────────────────────────────────────
+# Dongle 1 (SN: 00000001) — Dedicated DFW Approach, multichannel
+DONGLE1_CHANNELS = [
+    (132922000, "DFW Approach",      "132.922"),
+]
 
-FREQ_TO_LABEL = {hz: label for hz, label, _ in CHANNELS}
-FREQ_TO_MHZ = {hz: mhz for hz, _, mhz in CHANNELS}
+# Dongle 2 (SN: 00000002) — Departure/Approach/Clearance, multichannel
+DONGLE2_CHANNELS = [
+    (125025000, "DFW Departure",     "125.025"),
+    (125350000, "Dallas Approach",   "125.350"),
+    (126550000, "DFW Clearance",     "126.550"),
+]
+
+# Combined for file processing
+ALL_CHANNELS = DONGLE1_CHANNELS + DONGLE2_CHANNELS
+
+FREQ_TO_LABEL = {hz: label for hz, label, _ in ALL_CHANNELS}
+FREQ_TO_MHZ = {hz: mhz for hz, _, mhz in ALL_CHANNELS}
 
 # ── State ────────────────────────────────────────────────────────────────
 channel_stats = defaultdict(lambda: {"hits": 0, "total_secs": 0.0, "last": None, "recordings": 0})
@@ -114,10 +127,10 @@ def update_status_json():
             "last": s["last"].isoformat() if s["last"] else None,
         })
     status = {
-        "channel": "scanning",
+        "channel": "multichannel",
         "frequency": 0,
-        "state": "scanning",
-        "info": f"RTLSDR-Airband scan mode, {len(CHANNELS)} freqs",
+        "state": "monitoring",
+        "info": f"2 dongles, {len(ALL_CHANNELS)} freqs multichannel",
         "recordings_this_hour": sum(1 for n, s in channel_stats.items()
                                      if s["last"] and s["last"] > datetime.now() - timedelta(hours=1)),
         "total_recordings": total_recordings,
@@ -225,6 +238,34 @@ def safe_addstr(win, y, x, text, attr=0, max_x=None):
         pass
 
 
+def draw_channel_row(stdscr, row, mhz, label, stats, now, left_width):
+    """Draw a single channel row with color based on recency."""
+    s = stats
+    if s["last"] and (now - s["last"]).total_seconds() < 120:
+        color = curses.color_pair(4) | curses.A_BOLD   # Red = last 2 min
+    elif s["last"] and (now - s["last"]).total_seconds() < 600:
+        color = curses.color_pair(3)   # Yellow = last 10 min
+    elif s["hits"] > 0:
+        color = curses.color_pair(2)   # Cyan = has history
+    else:
+        color = curses.color_pair(5)   # White = quiet
+
+    last_str = ""
+    if s["last"]:
+        age = (now - s["last"]).total_seconds()
+        if age < 60:
+            last_str = f"{int(age)}s"
+        elif age < 3600:
+            last_str = f"{int(age/60)}m"
+        else:
+            last_str = s["last"].strftime("%H:%M")
+
+    safe_addstr(stdscr, row, 2, mhz, color, left_width)
+    safe_addstr(stdscr, row, 11, label[:18], color, left_width)
+    safe_addstr(stdscr, row, 30, str(s["hits"]), color, left_width)
+    safe_addstr(stdscr, row, 36, last_str, color, left_width)
+
+
 def draw_display(stdscr):
     global running
 
@@ -239,6 +280,7 @@ def draw_display(stdscr):
     curses.init_pair(6, curses.COLOR_MAGENTA, -1)   # Borders
     curses.init_pair(7, curses.COLOR_BLACK, curses.COLOR_GREEN)   # Header bar
     curses.init_pair(8, curses.COLOR_BLACK, curses.COLOR_CYAN)    # Column headers
+    curses.init_pair(9, curses.COLOR_GREEN, -1)     # Dongle headers
 
     last_status_write = 0
     LEFT_WIDTH = 42  # Width of left panel
@@ -262,47 +304,48 @@ def draw_display(stdscr):
             safe_addstr(stdscr, 0, 0, " " * width, curses.color_pair(7))
             safe_addstr(stdscr, 0, max(0, (width - len(title)) // 2), title, curses.color_pair(7) | curses.A_BOLD)
 
-            # ── Left panel: Frequencies ──────────────────────────────
+            # ── Left panel ───────────────────────────────────────────
             row = 2
-            safe_addstr(stdscr, row, 1, "FREQ", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
-            safe_addstr(stdscr, row, 10, "CHANNEL", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
+
+            # Dongle 1 header
+            safe_addstr(stdscr, row, 1, "DONGLE 1 (SN:001) DFW Approach", curses.color_pair(9) | curses.A_BOLD, LEFT_WIDTH)
+            row += 1
+            safe_addstr(stdscr, row, 2, "FREQ", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
+            safe_addstr(stdscr, row, 11, "CHANNEL", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
             safe_addstr(stdscr, row, 30, "HITS", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
             safe_addstr(stdscr, row, 36, "LAST", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
             row += 1
-
-            # Draw separator line
-            safe_addstr(stdscr, row, 0, "-" * (LEFT_WIDTH - 1), curses.color_pair(6))
+            safe_addstr(stdscr, row, 1, "-" * (LEFT_WIDTH - 2), curses.color_pair(6))
             row += 1
 
-            for freq_hz, label, mhz in CHANNELS:
+            for freq_hz, label, mhz in DONGLE1_CHANNELS:
                 if row >= height - 1:
                     break
                 s = channel_stats.get(label, {"hits": 0, "total_secs": 0, "last": None})
+                draw_channel_row(stdscr, row, mhz, label, s, now, LEFT_WIDTH)
+                row += 1
 
-                # Color based on recency
-                if s["last"] and (now - s["last"]).total_seconds() < 120:
-                    color = curses.color_pair(4) | curses.A_BOLD   # Red = last 2 min
-                elif s["last"] and (now - s["last"]).total_seconds() < 600:
-                    color = curses.color_pair(3)   # Yellow = last 10 min
-                elif s["hits"] > 0:
-                    color = curses.color_pair(2)   # Cyan = has history
-                else:
-                    color = curses.color_pair(5)   # White = quiet
+            row += 1  # Blank line between dongles
 
-                last_str = ""
-                if s["last"]:
-                    age = (now - s["last"]).total_seconds()
-                    if age < 60:
-                        last_str = f"{int(age)}s"
-                    elif age < 3600:
-                        last_str = f"{int(age/60)}m"
-                    else:
-                        last_str = s["last"].strftime("%H:%M")
+            # Dongle 2 header
+            if row < height - 1:
+                safe_addstr(stdscr, row, 1, "DONGLE 2 (SN:002) Depart/Appr/Clr", curses.color_pair(9) | curses.A_BOLD, LEFT_WIDTH)
+                row += 1
+            if row < height - 1:
+                safe_addstr(stdscr, row, 2, "FREQ", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
+                safe_addstr(stdscr, row, 11, "CHANNEL", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
+                safe_addstr(stdscr, row, 30, "HITS", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
+                safe_addstr(stdscr, row, 36, "LAST", curses.color_pair(8) | curses.A_BOLD, LEFT_WIDTH)
+                row += 1
+            if row < height - 1:
+                safe_addstr(stdscr, row, 1, "-" * (LEFT_WIDTH - 2), curses.color_pair(6))
+                row += 1
 
-                safe_addstr(stdscr, row, 1, mhz, color, LEFT_WIDTH)
-                safe_addstr(stdscr, row, 10, label[:18], color, LEFT_WIDTH)
-                safe_addstr(stdscr, row, 30, str(s["hits"]), color, LEFT_WIDTH)
-                safe_addstr(stdscr, row, 36, last_str, color, LEFT_WIDTH)
+            for freq_hz, label, mhz in DONGLE2_CHANNELS:
+                if row >= height - 1:
+                    break
+                s = channel_stats.get(label, {"hits": 0, "total_secs": 0, "last": None})
+                draw_channel_row(stdscr, row, mhz, label, s, now, LEFT_WIDTH)
                 row += 1
 
             # ── Vertical divider ─────────────────────────────────────
@@ -360,7 +403,7 @@ def draw_display(stdscr):
                 safe_addstr(stdscr, 5, right_x + 2, "Waiting for transmissions...", curses.color_pair(5))
 
             # ── Bottom bar ───────────────────────────────────────────
-            footer = f" rtl_airband v5 | 24 AM freqs | {now.strftime('%Y-%m-%d')} | Recordings: ~/closecall/recordings/ "
+            footer = f" rtl_airband v5 | 2 dongles, {len(ALL_CHANNELS)} freqs multichannel | {now.strftime('%Y-%m-%d')} "
             safe_addstr(stdscr, height - 1, 0, " " * width, curses.color_pair(7))
             safe_addstr(stdscr, height - 1, max(0, (width - len(footer)) // 2), footer, curses.color_pair(7) | curses.A_BOLD)
 
