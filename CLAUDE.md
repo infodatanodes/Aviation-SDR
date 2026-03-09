@@ -62,7 +62,9 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 |----------|--------|-------|
 | RTLSDR-Airband (approach) | **Active** | `rtl-airband-approach.service` — dedicated 132.922 MHz, SN:00000001, Icecast `/approach` |
 | RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — multichannel 124.300/125.025/126.550 MHz (center 125.425), SN:00000002, Icecast `/scan` |
-| airband_display.py | **Active** | `airband-display.service` — curses UI on tty1, two-panel layout |
+| dashboard_server.py | **Active** | `airband-dashboard.service` — HTTP server port 8080, serves dashboard + /api/stats |
+| Chromium kiosk | **Active** | `kiosk.service` — Cage + Chromium fullscreen on 15.6" 1080p HDMI |
+| airband_display.py | **Retired** | Replaced by dashboard_server.py + kiosk |
 | transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
 | Icecast2 | **Active** | Port 8010 — `/approach` (dedicated) + `/scan` (scanner) mounts |
 | readsb v3.16.10 | Installed (disabled) | ADS-B decoder — no dedicated dongle assigned yet |
