@@ -77,12 +77,12 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 3. **Location set** — `sudo readsb-set-location 32.75 -97.33` (Fort Worth area).
 4. **Older dongle removed** — RTL2838UHIDIR unplugged, USB bus stable.
 5. **Scan mode fails with LNA+splitter** — Scan mode hops too fast across frequencies; squelch never opens because dwell time is too short with amplified noise floor. Fix: switched to multichannel mode (dongle stays parked, demodulates all channels simultaneously within ~2.3 MHz bandwidth).
-6. **20GB debug log filling SD card** — `-e` flag on rtl_airband services wrote `/rtl_airband_debug.log` continuously. Fix: removed `-e` flag from both service files. Disk went from 92% to 25%.
+6. **Debug log filling SD card (twice)** — First time: `-e` flag on services wrote 20GB. Second time: rtl_airband writes `/rtl_airband_debug.log` **by default** via `-d` flag (default path). Fix: added `-d /dev/null` to both service ExecStart lines. The `-e` flag only controls stderr, NOT the debug file.
 7. **Old rtl-airband.service crash-looping** — Stale original service (18,925 restarts) fighting for device 0. Fix: disabled, replaced by `rtl-airband-approach` and `rtl-airband-scan` services pinned by serial number.
 
 ## Lessons Learned
 
-- **Never use `-e` flag in production** — debug logging writes GB/day to root filesystem
+- **Always use `-d /dev/null` in production** — rtl_airband writes debug log by default, `-e` only controls stderr
 - **Multichannel mode > scan mode** when using LNA — ~2.3 MHz bandwidth limit per dongle, but no missed transmissions
 - **Pin dongles by serial number**, not index — indices can swap on reboot
 - **Dallas Approach (125.350)** showed zero activity — replaced with Regional Approach (124.300)
