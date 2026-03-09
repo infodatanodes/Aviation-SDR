@@ -217,53 +217,45 @@ html, body {
 .channel-status.idle .dot { background: #444; }
 .channel-status.idle { color: #555; }
 
-.channel-gauges {
+/* ── SPARKLINE ── */
+.channel-sparkline {
     display: flex;
-    flex-direction: column;
-    gap: 4px;
+    align-items: flex-end;
+    gap: 1px;
+    height: 28px;
+    padding: 2px 0;
 }
 
-.gauge-row {
+.spark-bar {
+    flex: 1;
+    min-width: 0;
+    border-radius: 1px 1px 0 0;
+    background: #2a2a4e;
+    min-height: 1px;
+}
+
+.channel-meta {
     display: flex;
     align-items: center;
-    gap: 10px;
-}
-
-.gauge-label {
+    gap: 12px;
     font-size: 10px;
-    color: #888;
-    width: 48px;
-    text-align: right;
+    color: #666;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
 
-.gauge-track {
-    flex: 1;
-    height: 14px;
-    background: #0d0d1a;
-    border-radius: 3px;
-    overflow: hidden;
-    position: relative;
+.channel-meta .last-active {
+    color: #888;
 }
 
-.gauge-track.noise {
-    height: 8px;
-}
-
-.gauge-fill {
-    height: 100%;
-    border-radius: 3px;
-    transition: width 0.5s ease;
-    min-width: 2px;
-}
-
-.gauge-value {
-    font-size: 11px;
+.channel-meta .last-active.recent {
     color: #aaa;
-    width: 64px;
-    text-align: left;
-    font-weight: 600;
+}
+
+.sparkline-label {
+    font-size: 9px;
+    color: #555;
+    text-align: right;
 }
 
 .channel-bottom {
@@ -606,17 +598,11 @@ const TX_DISPLAY_COUNT = 15;
 
 let lastTxIds = new Set();
 let initialized = false;
+let prevSquelch = {};  // Track previous squelch counts for delta detection
 
 // ── HELPERS ──
 function getColor(name) {
     return CHANNEL_COLORS[name] || DEFAULT_COLOR;
-}
-
-function dbfsToPercent(dbfs) {
-    // -30 dBFS = 100%, -55 dBFS = 0%
-    if (dbfs >= -30) return 100;
-    if (dbfs <= -55) return 0;
-    return ((dbfs + 55) / 25) * 100;
 }
 
 function cToF(c) {
@@ -628,13 +614,23 @@ function formatTemp(c) {
     return `${f.toFixed(0)}\u00b0F (${c.toFixed(1)}\u00b0C)`;
 }
 
+function formatLastActive(secs) {
+    if (secs == null) return 'No activity';
+    if (secs < 5) return 'Just now';
+    if (secs < 60) return `${secs}s ago`;
+    if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
+    return `${Math.floor(secs / 3600)}h ago`;
+}
+
 // ── BUILD CHANNEL CARD HTML ──
 function buildChannelCard(ch) {
     const color = getColor(ch.name);
-    const sigPct = dbfsToPercent(ch.signal_dbfs);
-    const noisePct = dbfsToPercent(ch.noise_dbfs);
-    const isActive = ch.active === true;
-    const statusClass = isActive ? 'live' : 'idle';
+    const sparkline = ch.sparkline || [];
+
+    // Squelch delta detection — LIVE if squelch count increased since last poll
+    const prevCount = prevSquelch[ch.name];
+    const squelchDelta = (prevCount != null && ch.squelch_opens > prevCount);
+    const isActive = ch.active === true || squelchDelta;
     const statusText = isActive ? 'LIVE' : 'IDLE';
 
     const liveDotStyle = isActive
@@ -644,35 +640,40 @@ function buildChannelCard(ch) {
         ? `color:${color}; animation: pulse 1.5s infinite;`
         : 'color:#555;';
 
+    // Build sparkline bars
+    const maxSpark = Math.max(1, ...sparkline);
+    let sparkHtml = '';
+    for (let i = 0; i < sparkline.length; i++) {
+        const val = sparkline[i];
+        const h = val > 0 ? Math.max(3, Math.round((val / maxSpark) * 24)) : 1;
+        const opacity = val > 0 ? 0.9 : 0.15;
+        const barColor = val > 0 ? color : '#2a2a4e';
+        sparkHtml += `<div class="spark-bar" style="height:${h}px;background:${barColor};opacity:${opacity};"></div>`;
+    }
+
+    // Last active text
+    const lastActiveText = formatLastActive(ch.last_active_secs);
+    const lastActiveClass = (ch.last_active_secs != null && ch.last_active_secs < 120) ? 'last-active recent' : 'last-active';
+
+    // Active card glow
+    const cardBorder = isActive ? `border-color: ${color}; box-shadow: 0 0 8px ${color}33;` : '';
+
     return `
-    <div class="channel-card" data-channel="${ch.name}">
+    <div class="channel-card" data-channel="${ch.name}" style="${cardBorder}">
         <div class="channel-top">
             <div class="left">
                 <span class="freq-badge" style="background:${color}">${ch.freq}</span>
                 <span class="channel-name">${ch.name}</span>
             </div>
-            <div class="channel-status ${statusClass}" style="${liveTextStyle}">
+            <div class="channel-status ${isActive ? 'live' : 'idle'}" style="${liveTextStyle}">
                 <span class="dot" style="${liveDotStyle}"></span>${statusText}
             </div>
         </div>
-        <div class="channel-gauges">
-            <div class="gauge-row">
-                <span class="gauge-label">Signal</span>
-                <div class="gauge-track">
-                    <div class="gauge-fill" style="width:${sigPct}%; background: linear-gradient(90deg, #1a1a2e, ${color});"></div>
-                </div>
-                <span class="gauge-value">${ch.signal_dbfs.toFixed(1)} dBFS</span>
-            </div>
-            <div class="gauge-row">
-                <span class="gauge-label">Noise</span>
-                <div class="gauge-track noise">
-                    <div class="gauge-fill" style="width:${noisePct}%; background: linear-gradient(90deg, #1a1a2e, #555);"></div>
-                </div>
-                <span class="gauge-value">${ch.noise_dbfs.toFixed(1)} dBFS</span>
-            </div>
-        </div>
-        <div class="channel-bottom">
-            <span class="squelch-count">Squelch Opens: <span>${ch.squelch_opens.toLocaleString()}</span></span>
+        <div class="channel-sparkline">${sparkHtml}</div>
+        <div class="channel-meta">
+            <span class="squelch-count">Squelch: <span style="color:#ccc;font-weight:700">${ch.squelch_opens.toLocaleString()}</span></span>
+            <span class="${lastActiveClass}">${lastActiveText}</span>
+            <span class="sparkline-label">30 min</span>
         </div>
     </div>`;
 }
@@ -686,12 +687,19 @@ function updateClock(data) {
 function updateDongles(dongles) {
     if (!dongles) return;
 
+    // Collect all channels to check squelch deltas
+    const allChannels = [];
+
     // Approach dongle
     const approach = dongles.approach;
     if (approach) {
+        allChannels.push(...approach.channels);
         const container = document.getElementById('dongle1-channels');
         container.innerHTML = approach.channels.map(buildChannelCard).join('');
-        const anyActive = approach.channels.some(c => c.active);
+        const anyActive = approach.channels.some(c => {
+            const prev = prevSquelch[c.name];
+            return c.active || (prev != null && c.squelch_opens > prev);
+        });
         const badge = document.getElementById('dongle1-badge');
         badge.className = 'live-badge' + (anyActive ? ' active' : '');
         badge.innerHTML = `<span class="dot"></span>${anyActive ? 'LIVE' : 'IDLE'}`;
@@ -700,12 +708,21 @@ function updateDongles(dongles) {
     // Scanner dongle
     const scanner = dongles.scanner;
     if (scanner) {
+        allChannels.push(...scanner.channels);
         const container = document.getElementById('dongle2-channels');
         container.innerHTML = scanner.channels.map(buildChannelCard).join('');
-        const anyActive = scanner.channels.some(c => c.active);
+        const anyActive = scanner.channels.some(c => {
+            const prev = prevSquelch[c.name];
+            return c.active || (prev != null && c.squelch_opens > prev);
+        });
         const badge = document.getElementById('dongle2-badge');
         badge.className = 'live-badge' + (anyActive ? ' active' : '');
         badge.innerHTML = `<span class="dot"></span>${anyActive ? 'LIVE' : 'IDLE'}`;
+    }
+
+    // Update previous squelch counts for next poll delta check
+    for (const ch of allChannels) {
+        prevSquelch[ch.name] = ch.squelch_opens;
     }
 }
 

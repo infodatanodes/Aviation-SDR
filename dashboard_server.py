@@ -279,8 +279,8 @@ def compute_csv_stats(rows):
     today_total = 0
     channel_counts = defaultdict(int)
     for row in rows:
-        ts = row.get("timestamp", "")
-        name = row.get("channel_name", "Unknown")
+        ts = row.get("timestamp", row.get("dtg", ""))
+        name = row.get("channel_name", row.get("identification", "Unknown"))
         if ts.startswith(today_str):
             today_total += 1
         channel_counts[name] += 1
@@ -301,15 +301,32 @@ def compute_csv_stats(rows):
     }
 
 
+def _parse_duration(row):
+    """Extract duration from CSV row, handling old column layout.
+
+    Old CSV has duration_sec='am' (mode) and peak_rms=actual duration.
+    New CSV has duration_secs=actual duration.
+    """
+    for col in ("duration_secs", "duration_sec", "peak_rms"):
+        val = row.get(col)
+        if val:
+            try:
+                return float(val)
+            except (ValueError, TypeError):
+                continue
+    return 0.0
+
+
 def get_recent_transmissions(rows, limit=20):
     """Return the last N transmissions from CSV rows."""
     recent = []
     for row in rows[-limit:]:
         try:
-            dt = datetime.strptime(row["timestamp"], "%Y-%m-%d %H:%M:%S")
+            ts_str = row.get("timestamp", row.get("dtg", ""))
+            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
             freq = row.get("frequency_mhz", "")
-            name = row.get("channel_name", "Unknown")
-            dur = float(row.get("duration_secs", 0))
+            name = row.get("channel_name", row.get("identification", "Unknown"))
+            dur = _parse_duration(row)
             recent.append({
                 "timestamp": dt.strftime("%H:%M:%S"),
                 "frequency": freq,
@@ -328,12 +345,38 @@ def get_active_channels(rows):
     active = set()
     for row in rows[-100:]:  # only check recent tail
         try:
-            dt = datetime.strptime(row["timestamp"], "%Y-%m-%d %H:%M:%S")
+            ts_str = row.get("timestamp", row.get("dtg", ""))
+            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
             if dt >= cutoff:
-                active.add(row.get("channel_name", ""))
+                active.add(row.get("channel_name", row.get("identification", "")))
         except (ValueError, KeyError):
             continue
     return active
+
+
+def get_channel_sparkline(rows, minutes=30):
+    """Return per-channel activity bucketed into 1-minute slots for sparklines.
+
+    Returns dict: channel_name -> list of 30 ints (transmission counts per minute,
+    oldest first).
+    """
+    cutoff = datetime.now() - timedelta(minutes=minutes)
+    buckets = defaultdict(lambda: [0] * minutes)
+    now = datetime.now()
+    for row in rows:
+        try:
+            ts_str = row.get("timestamp", row.get("dtg", ""))
+            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+            if dt < cutoff:
+                continue
+            name = row.get("channel_name", row.get("identification", ""))
+            mins_ago = int((now - dt).total_seconds() / 60)
+            idx = minutes - 1 - mins_ago
+            if 0 <= idx < minutes:
+                buckets[name][idx] += 1
+        except (ValueError, KeyError):
+            continue
+    return dict(buckets)
 
 
 # ── Build /api/stats response ────────────────────────────────────────────
@@ -353,17 +396,34 @@ def format_uptime():
     return " ".join(parts)
 
 
-def build_channel_entry(freq_mhz, name, stats_data, active_channels):
+def get_last_active(rows):
+    """Return dict of channel_name -> seconds since last transmission."""
+    now = datetime.now()
+    last = {}
+    for row in rows:
+        try:
+            ts_str = row.get("timestamp", row.get("dtg", ""))
+            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+            name = row.get("channel_name", row.get("identification", ""))
+            if name not in last or dt > last[name]:
+                last[name] = dt
+        except (ValueError, KeyError):
+            continue
+    return {name: int((now - dt).total_seconds()) for name, dt in last.items()}
+
+
+def build_channel_entry(freq_mhz, name, stats_data, active_channels,
+                        sparkline_data, last_active_data):
     """Build a single channel dict for the API response."""
     key = (freq_mhz, name)
     metrics = stats_data.get(key, {})
     return {
         "freq": freq_mhz,
         "name": name,
-        "signal_dbfs": round(metrics.get("channel_dbfs_signal_level", 0.0), 1),
-        "noise_dbfs": round(metrics.get("channel_dbfs_noise_level", 0.0), 1),
         "squelch_opens": int(metrics.get("channel_squelch_counter", 0)),
         "active": name in active_channels,
+        "sparkline": sparkline_data.get(name, [0] * 30),
+        "last_active_secs": last_active_data.get(name),
     }
 
 
@@ -379,15 +439,19 @@ def build_stats_response():
     # Read CSV
     rows = _read_csv_rows()
     active_channels = get_active_channels(rows)
+    sparkline_data = get_channel_sparkline(rows)
+    last_active_data = get_last_active(rows)
 
     # Build dongle channel lists
     approach_channels = []
     for _, name, mhz in DONGLE1_CHANNELS:
-        approach_channels.append(build_channel_entry(mhz, name, all_stats, active_channels))
+        approach_channels.append(build_channel_entry(
+            mhz, name, all_stats, active_channels, sparkline_data, last_active_data))
 
     scanner_channels = []
     for _, name, mhz in DONGLE2_CHANNELS:
-        scanner_channels.append(build_channel_entry(mhz, name, all_stats, active_channels))
+        scanner_channels.append(build_channel_entry(
+            mhz, name, all_stats, active_channels, sparkline_data, last_active_data))
 
     # Health
     temp = get_pi_temp()
@@ -492,10 +556,11 @@ def load_existing_csv():
             reader = csv.DictReader(f)
             for row in reader:
                 try:
-                    dt = datetime.strptime(row["timestamp"], "%Y-%m-%d %H:%M:%S")
-                    label = row.get("channel_name", "Unknown")
+                    ts_str = row.get("timestamp", row.get("dtg", ""))
+                    dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+                    label = row.get("channel_name", row.get("identification", "Unknown"))
                     freq = row.get("frequency_mhz", "?")
-                    dur = float(row.get("duration_secs", 0))
+                    dur = _parse_duration(row)
                     activity_log.append((dt, label, freq, dur))
                     channel_stats[label]["hits"] += 1
                     channel_stats[label]["total_secs"] += dur
