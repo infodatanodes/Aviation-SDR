@@ -57,12 +57,18 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | XRDS-RF 2-Way Splitter | **Disconnected** | Removed — wideband freq split impractical, each dongle has dedicated antenna |
 | Superbat SMA M-to-M Jumpers (6") | **Spare** | No longer needed with splitter removed |
 
-### Arriving (eBay, March 6-13)
+### Arriving (March 10, 2026)
 | Item | Purpose |
 |------|---------|
-| 3-Way SMA Splitter (RF-MY13, 380-2500 MHz) | Future 3-way split for ADS-B + airband + P25 |
+| RTL-SDR Blog V4 (5th dongle) | **Arriving today** — candidate for 978 MHz UAT/FIS-B (local weather radar, METARs, PIREPs, TFRs) |
+| Dedicated antenna (for new V4) | **Arriving today** — paired with 5th dongle |
 | Browning BR-6283 (806-866 MHz, 3 dBd, 25") | Dedicated 800 MHz antenna for NTIRN P25 |
 | 50ft LMR-400 (PL259 UHF M-to-M) | Feed line for Browning antenna |
+
+### No Longer Needed
+| Item | Reason |
+|------|--------|
+| 3-Way SMA Splitter (RF-MY13, 380-2500 MHz) | Splitter approach abandoned — dedicated antennas per dongle |
 
 ## Software Installed on Pi
 
