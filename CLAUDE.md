@@ -34,13 +34,11 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
    Approach  Scanner
    132.922   3 freqs (multichannel)
 
-   V4 #3 (SN:003) — ADS-B 1090 MHz — on D3000 via splitter
+   V4 #3 (SN:003) — ADS-B 1090 MHz — on D3000 directly (no splitter)
    Old RTL2838UHIDIR (SN:004) — ACARS 131.55 MHz — on Bingfu indoor antenna
 ```
 
-**Note:** LNA REMOVED from chain (March 9, 2026). The +18.7 dB gain was overloading the ADS-B receiver at 1090 MHz, limiting range to 12nm. Without LNA: 40+ nm immediately. LNA may be reintroduced for VHF airband only if needed.
-
-**Dedicated 1090 MHz antenna ordered** — will replace D3000 share for ADS-B dongle.
+**Antenna setup (March 10, 2026):** Each dongle has a dedicated antenna. Splitters removed — wideband frequency differences made splitting impractical, and the LNA was hurting ADS-B performance. D3000 discone feeds ADS-B directly. VHF airband dongles use dedicated Bingfu antennas and scanner antenna. LNA disconnected (overloaded ADS-B at 1090 MHz, limited range to 12nm; without it: 40+ nm).
 
 ### Installed Hardware
 | Item | Status | Notes |
@@ -49,14 +47,15 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | RTL-SDR Blog V4 (SN: 00000002) | **Active** | Multichannel — 124.300/125.025/126.550 MHz (centered 125.425) |
 | RTL-SDR Blog V4 (SN: 00000003) | **Active** | ADS-B 1090 MHz — readsb, feeds Spacenodes via local API |
 | RTL2838UHIDIR (SN: 00000004) | **Active** | ACARS 131.55 MHz — old generic dongle (Realtek), acarsdec |
-| D3000 discone antenna | Mounted outside | 25-1300 MHz, feeds splitter |
-| 50ft LMR-400 coax (N to SMA) | Connected | Low-loss feed from antenna to splitter |
-| RTL-SDR Blog Wideband LNA | **Disconnected** | Removed — overloaded ADS-B at 1090 MHz (12nm range) |
-| XRDS-RF 2-Way Splitter | **Connected** | 3 dB split, D3000 to airband dongles |
-| Superbat SMA M-to-M Jumpers (6") | **Connected** | Splitter→dongles |
-| Atolla 7-Port Powered USB Hub (5V/4A) | **Connected** | Powers all 4 dongles |
+| D3000 discone antenna | **Connected** | 25-1300 MHz, feeds ADS-B dongle directly (no splitter) |
+| 50ft LMR-400 coax (N to SMA) | **Connected** | Low-loss feed from D3000 to ADS-B dongle |
+| Bingfu antennas | **Connected** | Dedicated antennas for VHF airband dongles (SN:001, SN:002) |
+| Scanner antenna | **Connected** | Additional dedicated antenna for VHF airband |
 | Bingfu indoor antenna | **Connected** | Feeds ACARS dongle (SN:004) |
-| **Dedicated 1090 MHz antenna** | **Ordered** | Will replace D3000 share for ADS-B |
+| Atolla 7-Port Powered USB Hub (5V/4A) | **Connected** | Powers all 4 dongles |
+| RTL-SDR Blog Wideband LNA | **Disconnected** | Removed — overloaded ADS-B at 1090 MHz (12nm range) |
+| XRDS-RF 2-Way Splitter | **Disconnected** | Removed — wideband freq split impractical, each dongle has dedicated antenna |
+| Superbat SMA M-to-M Jumpers (6") | **Spare** | No longer needed with splitter removed |
 
 ### Arriving (eBay, March 6-13)
 | Item | Purpose |
@@ -89,6 +88,7 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 3. **Location set** — `sudo readsb-set-location 32.75 -97.33` (Fort Worth area).
 4. **Older dongle repurposed** — RTL2838UHIDIR (SN:004) now used for ACARS decoding.
 5. **Scan mode fails with LNA+splitter** — Scan mode hops too fast across frequencies; squelch never opens because dwell time is too short with amplified noise floor. Fix: switched to multichannel mode (dongle stays parked, demodulates all channels simultaneously within ~2.3 MHz bandwidth).
+6. **Dedicated antennas > splitters for wideband** — Splitting a wideband antenna across dongles on very different frequencies (132 MHz VHF vs 1090 MHz ADS-B) is impractical. Each dongle now has its own antenna matched to its frequency range.
 6. **Debug log filling SD card (twice)** — First time: `-e` flag on services wrote 20GB. Second time: rtl_airband writes `/rtl_airband_debug.log` **by default** via `-d` flag (default path). Fix: added `-d /dev/null` to both service ExecStart lines. The `-e` flag only controls stderr, NOT the debug file.
 7. **Old rtl-airband.service crash-looping** — Stale original service (18,925 restarts) fighting for device 0. Fix: disabled, replaced by `rtl-airband-approach` and `rtl-airband-scan` services pinned by serial number.
 8. **Kiosk ACARS panel showing stale data** — ACARS messages from hours ago persisted on display with no age indication. Fix: added 30-minute cutoff filter in `get_acars_messages()` in dashboard_server.py. Messages older than 30 min are dropped; panel shows "No recent messages — listening on 4 frequencies" when empty.
