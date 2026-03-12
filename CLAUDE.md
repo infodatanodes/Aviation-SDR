@@ -12,7 +12,7 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 |-----------|-----------|----------|--------|
 | ADS-B tracking | 1090 MHz | Mode S Extended Squitter | **ACTIVE** — readsb on Pi, local feed to Spacenodes, tar1090 web map working |
 | VHF Airband | 118-137 MHz | AM voice | **ACTIVE** — RTLSDR-Airband multichannel mode, 4 DFW freqs (2 dongles), integrated into Spacenodes map |
-| UAT tracking | 978 MHz | Universal Access Transceiver | **ACTIVE** — dump978-fa on RTL2838UHIDIR V3 (SN:00000105), JSON on port 30979, raw on port 30978 |
+| UAT tracking | 978 MHz | Universal Access Transceiver | **ACTIVE** — dump978-fa on RTL-SDR Blog V4 (SN:00000002), JSON on port 30979, raw on port 30978. V4 needed for FM notch filter — V3 overloaded by FM broadcast indoors. Indoor 978 antenna insufficient for FIS-B ground stations — needs outdoor mounting. |
 | ACARS decoding | 131.55/131.45/131.475/131.725 MHz | VHF data link | **ACTIVE** — acarsdec on old RTL2838UHIDIR (SN:00000104), 4 ACARS freqs, parsed positions/routes fed to Spacenodes |
 | UHF Military | 225-400 MHz | AM voice | Not started |
 
@@ -44,10 +44,10 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | Item | Status | Notes |
 |------|--------|-------|
 | RTL-SDR Blog V4 (SN: 00000001) | **Active** | Dedicated DFW Approach 132.922 MHz |
-| RTL-SDR Blog V4 (SN: 00000002) | **Active** | Multichannel — 124.300/125.025/126.550 MHz (centered 125.425) |
+| RTL-SDR Blog V4 (SN: 00000002) | **Active** | UAT 978 MHz — dump978-fa, HzFitInc 978 antenna at ceiling |
 | RTL-SDR Blog V4 (SN: 00000003) | **Active** | ADS-B 1090 MHz — readsb, feeds Spacenodes via local API |
 | RTL2838UHIDIR (SN: 00000104) | **Active** | ACARS 131.55 MHz — old generic dongle (Realtek), acarsdec |
-| RTL2838UHIDIR V3 (SN: 00000105) | **Active** | UAT 978 MHz — V3 dongle (R820T), dump978-fa |
+| RTL2838UHIDIR V3 (SN: 00000105) | **Active** | Multichannel scanner — 124.300/125.025/126.550 MHz, rtl-airband-scan |
 | D3000 discone antenna | **Connected** | 25-1300 MHz, feeds ADS-B dongle directly (no splitter) |
 | 50ft LMR-400 coax (N to SMA) | **Connected** | Low-loss feed from D3000 to ADS-B dongle |
 | Bingfu antennas | **Connected** | Dedicated antennas for VHF airband dongles (SN:001, SN:002) |
@@ -80,9 +80,9 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | airband_display.py | **Retired** | Replaced by dashboard_server.py + kiosk |
 | transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
 | Icecast2 | **Active** | Port 8010 — `/approach` (dedicated) + `/scan` (scanner) mounts |
-| readsb v3.16.10 | **Active** | ADS-B decoder on SN:00000003, `--gain auto`, local JSON API |
+| readsb v3.16.10 | **Active** | ADS-B decoder on SN:00000003, `--gain 42.1` (tuned 2026-03-12, was auto), local JSON API |
 | tar1090 | **Active** | Web map at `http://100.68.206.39/tar1090/` — reads from readsb |
-| acarsdec | **Active** | ACARS decoder on SN:00000004, 4 freqs (131.550/131.450/131.475/131.725), gain 28, output to `/home/pi/closecall/acars_messages.jsonl` |
+| acarsdec | **Active** | ACARS decoder on SN:00000104, 4 freqs (131.550/131.450/131.475/131.725), gain 12 (tuned 2026-03-12, was 28; wideband LNA adds ~20dB), output to `/home/pi/closecall/acars_messages.jsonl` |
 | dump978-fa | **Active** | `dump978-fa.service` — UAT 978 MHz decoder on SN:00000105, JSON port 30979, raw port 30978 |
 | rtl_test/rtl_fm/rtl_power | Installed | Blog fork versions at `/usr/local/bin/` |
 | librtlsdr (Blog fork) | Installed | Built from source at `/usr/local/lib/` — required for V4 |
@@ -119,6 +119,9 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 - **ADS-B range overnight** — With D3000 + no LNA, typical overnight range 25-57 nm. Daytime should be higher with more aircraft at various distances.
 - **RTL-SDR serial collision** — All Blog V4 dongles ship with SN:00000001. Always reprogram with `rtl_eeprom` before adding to multi-dongle setup. Use serials > 100 (e.g., 00000104) to avoid librtlsdr interpreting them as device indices.
 - **UAT traffic is sporadic** — GA aircraft below 18,000 ft, mainly daytime. FIS-B ground stations broadcast weather data periodically regardless of aircraft.
+- **ADS-B optimal gain: 42.1 dB** — Tuned 2026-03-12 across 9 settings (32.8–49.6). Auto gain had 3,834 strong signals (clipping); 42.1 scored highest (6,832) with 17 avg aircraft and zero clipping. Above 44.5 dB, strong signals appear.
+- **ACARS optimal gain: 12 dB (with LNA)** — Tuned 2026-03-12 across 6 settings (8–28). With wideband LNA (~20 dB), dongle gain 12 = ~32 dB total. Higher gains (24+) completely deaf from saturation. Without LNA, gain 20-28 would be appropriate.
+- **Don't assume hardware failure** — V4 #2 showed bad IQ on Pi (range 7-9) but tested perfect on main PC (range 255). Root cause was USB hub power starvation, not dead RF front end. Always test on second machine before declaring dead.
 - **ACARS activity patterns** — Busy during daytime/evening, very sparse 2-5 AM. All 4 monitored ACARS freqs most active on 131.725 MHz in DFW area.
 
 ## Log Management
