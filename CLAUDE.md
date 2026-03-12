@@ -12,8 +12,8 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 |-----------|-----------|----------|--------|
 | ADS-B tracking | 1090 MHz | Mode S Extended Squitter | **ACTIVE** — readsb on Pi, local feed to Spacenodes, tar1090 web map working |
 | VHF Airband | 118-137 MHz | AM voice | **ACTIVE** — RTLSDR-Airband multichannel mode, 4 DFW freqs (2 dongles), integrated into Spacenodes map |
-| UAT tracking | 978 MHz | Universal Access Transceiver | Not started — US only, <18,000 ft GA aircraft |
-| ACARS decoding | 131.55/131.45/131.475/131.725 MHz | VHF data link | **ACTIVE** — acarsdec on old RTL2838UHIDIR (SN:004), 4 ACARS freqs, parsed positions/routes fed to Spacenodes |
+| UAT tracking | 978 MHz | Universal Access Transceiver | **ACTIVE** — dump978-fa on RTL2838UHIDIR V3 (SN:00000105), JSON on port 30979, raw on port 30978 |
+| ACARS decoding | 131.55/131.45/131.475/131.725 MHz | VHF data link | **ACTIVE** — acarsdec on old RTL2838UHIDIR (SN:00000104), 4 ACARS freqs, parsed positions/routes fed to Spacenodes |
 | UHF Military | 225-400 MHz | AM voice | Not started |
 
 ## Hardware (On Pi #2 — pi-scanner, 100.68.206.39)
@@ -46,7 +46,8 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | RTL-SDR Blog V4 (SN: 00000001) | **Active** | Dedicated DFW Approach 132.922 MHz |
 | RTL-SDR Blog V4 (SN: 00000002) | **Active** | Multichannel — 124.300/125.025/126.550 MHz (centered 125.425) |
 | RTL-SDR Blog V4 (SN: 00000003) | **Active** | ADS-B 1090 MHz — readsb, feeds Spacenodes via local API |
-| RTL2838UHIDIR (SN: 00000004) | **Active** | ACARS 131.55 MHz — old generic dongle (Realtek), acarsdec |
+| RTL2838UHIDIR (SN: 00000104) | **Active** | ACARS 131.55 MHz — old generic dongle (Realtek), acarsdec |
+| RTL2838UHIDIR V3 (SN: 00000105) | **Active** | UAT 978 MHz — V3 dongle (R820T), dump978-fa |
 | D3000 discone antenna | **Connected** | 25-1300 MHz, feeds ADS-B dongle directly (no splitter) |
 | 50ft LMR-400 coax (N to SMA) | **Connected** | Low-loss feed from D3000 to ADS-B dongle |
 | Bingfu antennas | **Connected** | Dedicated antennas for VHF airband dongles (SN:001, SN:002) |
@@ -57,11 +58,9 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | XRDS-RF 2-Way Splitter | **Disconnected** | Removed — wideband freq split impractical, each dongle has dedicated antenna |
 | Superbat SMA M-to-M Jumpers (6") | **Spare** | No longer needed with splitter removed |
 
-### Arriving (March 10, 2026)
+### Arriving / Pending
 | Item | Purpose |
 |------|---------|
-| RTL-SDR Blog V4 (5th dongle) | **Arriving today** — candidate for 978 MHz UAT/FIS-B (local weather radar, METARs, PIREPs, TFRs) |
-| Dedicated antenna (for new V4) | **Arriving today** — paired with 5th dongle |
 | Browning BR-6283 (806-866 MHz, 3 dBd, 25") | Dedicated 800 MHz antenna for NTIRN P25 |
 | 50ft LMR-400 (PL259 UHF M-to-M) | Feed line for Browning antenna |
 
@@ -84,6 +83,7 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | readsb v3.16.10 | **Active** | ADS-B decoder on SN:00000003, `--gain auto`, local JSON API |
 | tar1090 | **Active** | Web map at `http://100.68.206.39/tar1090/` — reads from readsb |
 | acarsdec | **Active** | ACARS decoder on SN:00000004, 4 freqs (131.550/131.450/131.475/131.725), gain 28, output to `/home/pi/closecall/acars_messages.jsonl` |
+| dump978-fa | **Active** | `dump978-fa.service` — UAT 978 MHz decoder on SN:00000105, JSON port 30979, raw port 30978 |
 | rtl_test/rtl_fm/rtl_power | Installed | Blog fork versions at `/usr/local/bin/` |
 | librtlsdr (Blog fork) | Installed | Built from source at `/usr/local/lib/` — required for V4 |
 
@@ -100,7 +100,8 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 8. **Kiosk ACARS panel showing stale data** — ACARS messages from hours ago persisted on display with no age indication. Fix: added 30-minute cutoff filter in `get_acars_messages()` in dashboard_server.py. Messages older than 30 min are dropped; panel shows "No recent messages — listening on 4 frequencies" when empty.
 9. **Kiosk display freeze** — Dashboard fetch loop could die silently, leaving stale aircraft/ACARS on screen for hours. Fix: added self-healing watchdog in dashboard.html — auto-reloads page after 30 consecutive fetch failures or 5 minutes with no successful update.
 10. **Kiosk 3 AM restart seatd permission errors** — Cage sometimes fails to acquire DRM session on daily restart cron (`Could not open target tty: Permission denied`). Cage's `Restart=always` in systemd retries and typically succeeds on second attempt ~10s later.
-11. **Dashboard server path confusion** — Service runs from `/home/pi/dashboard/dashboard_server.py`, NOT `/home/pi/closecall/`. Both copies exist; the closecall copy is stale. Always edit the `/home/pi/dashboard/` version.
+11. **Duplicate serial 00000001 on 5th dongle** — New V3 dongle shipped with default SN:001, colliding with existing approach V4. Used `rtl_eeprom -d <idx> -s <serial>` to program unique serials. Also renamed ACARS dongle from SN:00000004 to SN:00000104 because librtlsdr interprets small numeric serials as device indices (00000004 → index 4).
+12. **Dashboard server path confusion** — Service runs from `/home/pi/dashboard/dashboard_server.py`, NOT `/home/pi/closecall/`. Both copies exist; the closecall copy is stale. Always edit the `/home/pi/dashboard/` version.
 
 ## Lessons Learned
 
@@ -116,6 +117,8 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 - **ACARS messages need age filtering** — acarsdec appends to JSONL forever; dashboard must filter old entries or display goes stale during quiet hours.
 - **Remote kiosk screenshots via CDP** — Chromium `--remote-debugging-port=9222` enables Chrome DevTools Protocol. Script at `/home/pi/closecall/kiosk_screenshot.py` takes PNG screenshots. Use for remote monitoring.
 - **ADS-B range overnight** — With D3000 + no LNA, typical overnight range 25-57 nm. Daytime should be higher with more aircraft at various distances.
+- **RTL-SDR serial collision** — All Blog V4 dongles ship with SN:00000001. Always reprogram with `rtl_eeprom` before adding to multi-dongle setup. Use serials > 100 (e.g., 00000104) to avoid librtlsdr interpreting them as device indices.
+- **UAT traffic is sporadic** — GA aircraft below 18,000 ft, mainly daytime. FIS-B ground stations broadcast weather data periodically regardless of aircraft.
 - **ACARS activity patterns** — Busy during daytime/evening, very sparse 2-5 AM. All 4 monitored ACARS freqs most active on 131.725 MHz in DFW area.
 
 ## Log Management
@@ -261,8 +264,11 @@ ssh pi@100.68.206.39 "cat /sys/bus/usb/devices/*/serial 2>/dev/null | sort -u"
 # Check ACARS message log
 ssh pi@100.68.206.39 "tail -5 /home/pi/closecall/acars_messages.jsonl"
 
-# Check all 5 services
-ssh pi@100.68.206.39 "systemctl is-active readsb rtl-airband-approach rtl-airband-scan airband-dashboard kiosk"
+# Check all 6 services
+ssh pi@100.68.206.39 "systemctl is-active readsb rtl-airband-approach rtl-airband-scan airband-dashboard kiosk dump978-fa"
+
+# Check UAT messages
+ssh pi@100.68.206.39 "timeout 10 nc -q1 localhost 30979 | head -5"
 ```
 
 ## References
