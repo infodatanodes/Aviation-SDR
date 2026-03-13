@@ -24,7 +24,7 @@ from datetime import datetime, timedelta
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
 from collections import defaultdict
-from urllib.request import urlopen
+from urllib.request import urlopen, Request
 from urllib.error import URLError
 
 # ── Paths ─────────────────────────────────────────────────────────────────
@@ -35,6 +35,8 @@ STATUS_JSON = HOME / "closecall" / "listener_status.json"
 EVENT_LOG = HOME / "closecall" / "airband_events.log"
 STATS_APPROACH = HOME / "closecall" / "airband_approach_stats.txt"
 STATS_SCAN = HOME / "closecall" / "airband_scan_stats.txt"
+ADSB_JSON = Path("/run/readsb/aircraft.json")
+ACARS_LOG = HOME / "closecall" / "acars_messages.jsonl"
 DASHBOARD_HTML = Path(__file__).resolve().parent / "dashboard.html"
 
 PORT = 8080
@@ -379,6 +381,365 @@ def get_channel_sparkline(rows, minutes=30):
     return dict(buckets)
 
 
+# ── ADS-B + ACARS data ───────────────────────────────────────────────────
+
+def get_adsb_aircraft():
+    """Read aircraft from readsb JSON file."""
+    try:
+        with open(ADSB_JSON) as f:
+            data = json.load(f)
+        aircraft = []
+        for a in data.get("aircraft", []):
+            hex_code = a.get("hex", "")
+            flight = a.get("flight", "").strip()
+            if not flight and not hex_code:
+                continue
+            aircraft.append({
+                "hex": hex_code,
+                "flight": flight or hex_code.upper(),
+                "alt": a.get("alt_baro"),
+                "speed": a.get("gs"),
+                "rssi": a.get("rssi"),
+                "squawk": a.get("squawk"),
+                "distance": a.get("r_dst"),
+                "seen": a.get("seen", 0),
+            })
+        aircraft.sort(key=lambda x: (x["distance"] if x["distance"] is not None else 999))
+        return {
+            "count": len(data.get("aircraft", [])),
+            "aircraft": aircraft[:12],
+        }
+    except (OSError, json.JSONDecodeError):
+        return {"count": 0, "aircraft": []}
+
+
+def get_acars_messages():
+    """Read recent ACARS messages from JSONL log file."""
+    messages = []
+    try:
+        if not ACARS_LOG.exists():
+            return messages
+        with open(ACARS_LOG) as f:
+            lines = f.readlines()
+        for line in lines[-15:]:
+            try:
+                msg = json.loads(line.strip())
+                ts = msg.get("timestamp", 0)
+                if isinstance(ts, (int, float)):
+                    dt = datetime.fromtimestamp(ts)
+                    ts_str = dt.strftime("%H:%M:%S")
+                else:
+                    ts_str = str(ts)
+                text = (msg.get("text") or "").strip()
+                label = msg.get("label", "")
+                # Skip empty keepalive/polling messages (_d with no text)
+                if not text and label == "_d":
+                    continue
+                messages.append({
+                    "timestamp": ts_str,
+                    "flight": (msg.get("flight") or "").strip(),
+                    "tail": (msg.get("tail") or "").strip(),
+                    "label": label,
+                    "text": text[:100] if text else label,
+                    "freq": msg.get("freq", ""),
+                    "level": msg.get("level"),
+                    "error": msg.get("error", 0),
+                })
+            except (json.JSONDecodeError, ValueError):
+                continue
+        messages.reverse()
+    except OSError:
+        pass
+    return messages
+
+
+def _parse_acars_positions(text):
+    """Extract lat/lon position reports from ACARS text.
+
+    Handles multiple formats:
+    1. /A1 005441, 31.8107,- 97.9854,268,123.2,426,...
+    2. POSN32478W096547 (compact lat/lon: N32.478 W096.547)
+    Returns list of {lat, lon, alt, heading} dicts.
+    """
+    import re
+    positions = []
+
+    # Format 1: /A entries with decimal lat/lon
+    for match in re.finditer(
+        r'/A(\d)\s+(\d{6}),\s*([-\d.]+),\s*([-\d.]+),\s*(\d+),\s*([\d.]+),\s*(\d+)',
+        text
+    ):
+        seq, time_raw, lat, lon, heading, _, alt = match.groups()
+        try:
+            positions.append({
+                'seq': int(seq),
+                'lat': float(lat),
+                'lon': float(lon),
+                'alt': int(alt) * 100,
+                'heading': int(heading),
+            })
+        except (ValueError, TypeError):
+            continue
+
+    # Format 2: POSN/S + 5 digits + E/W + 6 digits (compact position)
+    pos_match = re.search(r'POS([NS])(\d{5})([EW])(\d{6})', text)
+    if pos_match:
+        ns, lat_raw, ew, lon_raw = pos_match.groups()
+        try:
+            lat = float(lat_raw[:2]) + float(lat_raw[2:]) / 1000
+            lon = float(lon_raw[:3]) + float(lon_raw[3:]) / 1000
+            if ns == 'S':
+                lat = -lat
+            if ew == 'W':
+                lon = -lon
+            positions.append({
+                'lat': round(lat, 4),
+                'lon': round(lon, 4),
+            })
+        except (ValueError, TypeError):
+            pass
+
+    return positions
+
+
+def _parse_acars_flight_plan(text):
+    """Extract flight plan info from ACARS FPN messages.
+
+    Handles: FPN/FNAAL2115/RP:DA:KMIA:AA:KDFW:CR:...
+    Returns dict with origin, destination, runway, approach or None.
+    """
+    import re
+    result = {}
+
+    # FPN format: DA:KXXX = departure, AA:KXXX = arrival
+    da = re.search(r'DA:([A-Z]{4})', text)
+    aa = re.search(r'AA:([A-Z]{4})', text)
+    rwy = re.search(r'R:(\d{2}[LCR]?)', text)
+
+    if da:
+        result['origin'] = da.group(1)
+    if aa:
+        result['destination'] = aa.group(1)
+    if rwy:
+        result['runway'] = rwy.group(1)
+
+    # Also check for encoded routes: KIAHKSLC etc (4-char ICAO pairs)
+    if not da and not aa:
+        route_match = re.search(r'(K[A-Z]{3})(K[A-Z]{3})', text)
+        if route_match:
+            result['origin'] = route_match.group(1)
+            result['destination'] = route_match.group(2)
+
+    # Waypoints from REQ/PWI routes: HRPER.HULZE.MIERA...
+    wpts = re.search(r'[:/]([A-Z]{3,5}(?:\.[A-Z]{3,5}){2,})', text)
+    if wpts:
+        result['waypoints'] = wpts.group(1).split('.')
+
+    return result if result else None
+
+
+def _parse_acars_weather(text):
+    """Extract wind/weather data from ACARS messages.
+
+    Handles PWI (Periodic Wind Information) and weather reports.
+    """
+    import re
+    result = {}
+
+    # Wind at altitude: WQ followed by flight levels
+    wq = re.search(r'WQ([\d.]+(?:\.[\d.]+)*)', text)
+    if wq:
+        result['wind_altitudes'] = wq.group(1)
+
+    return result if result else None
+
+
+def get_acars_parsed(limit=50):
+    """Read and parse ACARS messages into structured data for Spacenodes.
+
+    Returns list of parsed messages with extracted positions, routes, etc.
+    """
+    messages = []
+    try:
+        if not ACARS_LOG.exists():
+            return messages
+        with open(ACARS_LOG) as f:
+            lines = f.readlines()
+        for line in lines[-limit:]:
+            try:
+                msg = json.loads(line.strip())
+                text = (msg.get("text") or "").strip()
+                label = msg.get("label", "")
+
+                # Skip keepalives
+                if not text and label == "_d":
+                    continue
+
+                ts = msg.get("timestamp", 0)
+                if isinstance(ts, (int, float)):
+                    dt = datetime.fromtimestamp(ts)
+                    ts_iso = dt.isoformat()
+                else:
+                    ts_iso = str(ts)
+
+                parsed = {
+                    "timestamp": ts_iso,
+                    "flight": (msg.get("flight") or "").strip(),
+                    "tail": (msg.get("tail") or "").strip(),
+                    "label": label,
+                    "text": text,
+                    "freq": msg.get("freq", ""),
+                    "level": msg.get("level"),
+                    "error": msg.get("error", 0),
+                }
+
+                # Extract structured data
+                positions = _parse_acars_positions(text)
+                if positions:
+                    parsed["positions"] = positions
+
+                flight_plan = _parse_acars_flight_plan(text)
+                if flight_plan:
+                    parsed["flight_plan"] = flight_plan
+
+                weather = _parse_acars_weather(text)
+                if weather:
+                    parsed["weather"] = weather
+
+                messages.append(parsed)
+            except (json.JSONDecodeError, ValueError):
+                continue
+        messages.reverse()
+    except OSError:
+        pass
+    return messages
+
+
+# ── Emergency squawk detection + Discord alerts ─────────────────────────
+
+EMERGENCY_SQUAWKS = {
+    "7500": "HIJACK",
+    "7600": "RADIO FAILURE",
+    "7700": "EMERGENCY",
+}
+
+DISCORD_WEBHOOK = os.environ.get(
+    "DISCORD_WEBHOOK_AIR_TRAFFIC",
+    "https://discord.com/api/webhooks/1471574249016918017/4iOzhaXMBTyk0W-Td7zBwTj1esu13QUohqTMJGYGbY5gYOpixvX515-gEN_QelMDXtcN",
+)
+
+EMERGENCY_LOG = HOME / "closecall" / "emergency_squawks.log"
+
+# Track alerted aircraft to avoid spamming (hex -> last_alert_time)
+_alerted_emergencies = {}
+_ALERT_COOLDOWN = 300  # seconds before re-alerting same aircraft
+
+
+def check_emergency_squawks(adsb_data):
+    """Check for emergency squawk codes, log and alert via Discord."""
+    emergencies = []
+    now = time.time()
+
+    for aircraft in adsb_data.get("aircraft", []):
+        squawk = aircraft.get("squawk", "")
+        if squawk not in EMERGENCY_SQUAWKS:
+            continue
+        if aircraft.get("seen", 99) > 30:
+            continue  # stale data
+
+        hex_code = aircraft.get("hex", "unknown")
+        flight = (aircraft.get("flight") or "").strip() or hex_code.upper()
+        alert_type = EMERGENCY_SQUAWKS[squawk]
+        alt = aircraft.get("alt_baro", "?")
+        speed = aircraft.get("gs")
+        lat = aircraft.get("lat")
+        lon = aircraft.get("lon")
+        dist = aircraft.get("r_dst")
+
+        emergency = {
+            "type": alert_type,
+            "squawk": squawk,
+            "flight": flight,
+            "hex": hex_code,
+            "alt": alt,
+            "speed": round(speed) if speed else None,
+            "lat": lat,
+            "lon": lon,
+            "distance": round(dist, 1) if dist else None,
+        }
+        emergencies.append(emergency)
+
+        # Check cooldown
+        last_alert = _alerted_emergencies.get(hex_code, 0)
+        if now - last_alert < _ALERT_COOLDOWN:
+            continue
+
+        _alerted_emergencies[hex_code] = now
+
+        # Log to file
+        try:
+            with open(EMERGENCY_LOG, "a") as f:
+                f.write(f"{datetime.now().isoformat()} SQUAWK {squawk} "
+                        f"({alert_type}) {flight} alt={alt} "
+                        f"lat={lat} lon={lon} dist={dist}\n")
+        except OSError:
+            pass
+
+        # Discord alert
+        _send_discord_alert(emergency)
+
+    return emergencies
+
+
+def _send_discord_alert(emergency):
+    """Send emergency squawk alert to Discord."""
+    if not DISCORD_WEBHOOK:
+        return
+
+    squawk = emergency["squawk"]
+    alert_type = emergency["type"]
+    flight = emergency["flight"]
+    alt = emergency["alt"]
+    dist = emergency.get("distance")
+    lat = emergency.get("lat")
+    lon = emergency.get("lon")
+    speed = emergency.get("speed")
+
+    color = {"7500": 0xFF0000, "7600": 0xFF8800, "7700": 0xFF0000}.get(squawk, 0xFF0000)
+    emoji = {"7500": "🚨", "7600": "📻", "7700": "🆘"}.get(squawk, "⚠️")
+
+    location = ""
+    if lat and lon:
+        location = f"\n**Position:** {lat:.4f}, {lon:.4f}"
+    if dist:
+        location += f" ({dist} nm away)"
+
+    desc_parts = [f"**Aircraft:** {flight}", f"**Altitude:** {alt} ft"]
+    if speed:
+        desc_parts.append(f"**Speed:** {speed} kt")
+    if location:
+        desc_parts.append(location.strip())
+
+    payload = {
+        "embeds": [{
+            "title": f"{emoji} SQUAWK {squawk} — {alert_type}",
+            "description": "\n".join(desc_parts),
+            "color": color,
+            "footer": {"text": "Aviation SDR — Pi Scanner"},
+            "timestamp": datetime.utcnow().isoformat() + "Z",
+        }],
+    }
+
+    try:
+        data = json.dumps(payload).encode("utf-8")
+        req = Request(DISCORD_WEBHOOK, data=data,
+                      headers={"Content-Type": "application/json"})
+        urlopen(req, timeout=5)
+        log_event(f"Discord alert sent: SQUAWK {squawk} {flight}")
+    except (URLError, OSError) as e:
+        log_event(f"Discord alert failed: {e}")
+
+
 # ── Build /api/stats response ────────────────────────────────────────────
 
 def format_uptime():
@@ -412,8 +773,30 @@ def get_last_active(rows):
     return {name: int((now - dt).total_seconds()) for name, dt in last.items()}
 
 
+def get_channel_history(rows, limit_per_channel=15):
+    """Return per-channel recent transmission lists.
+
+    Returns dict: channel_name -> list of {timestamp, duration} dicts (newest first).
+    """
+    history = defaultdict(list)
+    for row in rows:
+        try:
+            ts_str = row.get("timestamp", row.get("dtg", ""))
+            dt = datetime.strptime(ts_str, "%Y-%m-%d %H:%M:%S")
+            name = row.get("channel_name", row.get("identification", "Unknown"))
+            dur = _parse_duration(row)
+            history[name].append({
+                "timestamp": dt.strftime("%H:%M:%S"),
+                "duration": round(dur, 1),
+            })
+        except (ValueError, KeyError):
+            continue
+    # Keep only last N per channel, newest first
+    return {name: entries[-limit_per_channel:][::-1] for name, entries in history.items()}
+
+
 def build_channel_entry(freq_mhz, name, stats_data, active_channels,
-                        sparkline_data, last_active_data):
+                        sparkline_data, last_active_data, channel_history):
     """Build a single channel dict for the API response."""
     key = (freq_mhz, name)
     metrics = stats_data.get(key, {})
@@ -424,6 +807,7 @@ def build_channel_entry(freq_mhz, name, stats_data, active_channels,
         "active": name in active_channels,
         "sparkline": sparkline_data.get(name, [0] * 30),
         "last_active_secs": last_active_data.get(name),
+        "history": channel_history.get(name, []),
     }
 
 
@@ -441,28 +825,41 @@ def build_stats_response():
     active_channels = get_active_channels(rows)
     sparkline_data = get_channel_sparkline(rows)
     last_active_data = get_last_active(rows)
+    channel_history = get_channel_history(rows)
 
     # Build dongle channel lists
     approach_channels = []
     for _, name, mhz in DONGLE1_CHANNELS:
         approach_channels.append(build_channel_entry(
-            mhz, name, all_stats, active_channels, sparkline_data, last_active_data))
+            mhz, name, all_stats, active_channels, sparkline_data, last_active_data, channel_history))
 
     scanner_channels = []
     for _, name, mhz in DONGLE2_CHANNELS:
         scanner_channels.append(build_channel_entry(
-            mhz, name, all_stats, active_channels, sparkline_data, last_active_data))
+            mhz, name, all_stats, active_channels, sparkline_data, last_active_data, channel_history))
 
-    # Health
-    temp = get_pi_temp()
-    cpu = get_cpu_load()
-    ram_total, ram_used = get_ram_info()
-    disk_pct = get_disk_percent()
-    icecast = get_icecast_mounts()
+    # ADS-B + ACARS
+    adsb = get_adsb_aircraft()
+    acars = get_acars_messages()
+
+    # Emergency squawk check (runs on raw aircraft.json data)
+    try:
+        with open(ADSB_JSON) as f:
+            raw_adsb = json.load(f)
+        emergencies = check_emergency_squawks(raw_adsb)
+    except (OSError, json.JSONDecodeError):
+        emergencies = []
+
+    # Flatten all channels for the new per-freq layout
+    all_channels = approach_channels + scanner_channels
 
     return {
         "clock": now.strftime("%H:%M:%S"),
         "uptime": format_uptime(),
+        "adsb": adsb,
+        "acars": acars,
+        "emergencies": emergencies,
+        "channels": all_channels,
         "dongles": {
             "approach": {
                 "serial": "00000001",
@@ -476,16 +873,6 @@ def build_stats_response():
                 "centerfreq": "125.425",
                 "channels": scanner_channels,
             },
-        },
-        "recent_transmissions": get_recent_transmissions(rows),
-        "stats": compute_csv_stats(rows),
-        "health": {
-            "temp_c": round(temp, 1) if temp is not None else None,
-            "cpu_load": round(cpu, 2) if cpu is not None else None,
-            "ram_used_mb": ram_used,
-            "ram_total_mb": ram_total,
-            "disk_percent": disk_pct,
-            "icecast_mounts": icecast,
         },
     }
 
@@ -595,6 +982,8 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self._serve_html()
         elif self.path == "/api/stats":
             self._serve_stats()
+        elif self.path == "/api/acars":
+            self._serve_acars_full()
         else:
             self.send_error(404)
 
@@ -621,6 +1010,21 @@ class DashboardHandler(BaseHTTPRequestHandler):
             self.wfile.write(body)
         except Exception as exc:
             log_event(f"stats error: {exc}")
+            self.send_error(500)
+
+    def _serve_acars_full(self):
+        """Serve parsed ACARS messages with extracted positions and flight plans."""
+        try:
+            payload = get_acars_parsed()
+            body = json.dumps(payload).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-cache")
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as exc:
+            log_event(f"acars parse error: {exc}")
             self.send_error(500)
 
     def log_message(self, format, *args):

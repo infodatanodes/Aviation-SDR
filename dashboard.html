@@ -16,9 +16,10 @@ html, body {
     font-family: 'Courier New', Consolas, monospace;
     font-size: 14px;
     -webkit-font-smoothing: antialiased;
+    display: flex;
+    flex-direction: column;
 }
 
-/* ── KEYFRAMES ── */
 @keyframes pulse {
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
@@ -34,19 +35,20 @@ html, body {
     50% { opacity: 0.3; }
 }
 
-/* ── TITLE BAR ── */
+/* -- TITLE BAR -- */
 #title-bar {
-    height: 48px;
+    height: 40px;
     background: linear-gradient(135deg, #00bfff 0%, #0099cc 100%);
     display: flex;
     align-items: center;
     justify-content: space-between;
     padding: 0 24px;
     box-shadow: 0 2px 12px rgba(0, 191, 255, 0.3);
+    flex-shrink: 0;
 }
 
 #title-bar h1 {
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 700;
     color: #0a0a0a;
     letter-spacing: 2px;
@@ -58,11 +60,11 @@ html, body {
     gap: 24px;
     color: #0a0a0a;
     font-weight: 600;
-    font-size: 16px;
+    font-size: 14px;
 }
 
 #title-bar .right .clock {
-    font-size: 22px;
+    font-size: 18px;
     font-weight: 700;
     letter-spacing: 1px;
 }
@@ -75,373 +77,209 @@ html, body {
     animation: conn-pulse 1s infinite;
 }
 
-/* ── DONGLE PANELS ── */
-#dongles {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    padding: 16px 24px;
-    height: 420px;
+/* -- EMERGENCY BANNER -- */
+#emergency-banner {
+    display: none;
+    background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%);
+    padding: 8px 24px;
+    font-size: 16px;
+    font-weight: 700;
+    color: #ffffff;
+    text-align: center;
+    letter-spacing: 2px;
+    animation: emergency-flash 0.5s infinite alternate;
+    flex-shrink: 0;
 }
 
-.dongle-panel {
+@keyframes emergency-flash {
+    0% { background: linear-gradient(135deg, #ff0000 0%, #cc0000 100%); }
+    100% { background: linear-gradient(135deg, #ff4444 0%, #ff0000 100%); }
+}
+
+/* -- MAIN GRID (3x2) -- */
+#main-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    grid-template-rows: 1fr 1fr;
+    gap: 8px;
+    padding: 8px 12px;
+    flex: 1;
+    min-height: 0;
+}
+
+/* -- PANEL SHARED -- */
+.panel {
     background: #111122;
     border: 1px solid #2a2a4e;
-    border-radius: 8px;
+    border-radius: 6px;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    min-height: 0;
 }
 
-.dongle-header {
+.panel-hdr {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 18px;
+    padding: 6px 12px;
     background: #0d0d1a;
     border-left: 4px solid #2a2a4e;
+    min-height: 36px;
+    flex-shrink: 0;
 }
 
-.dongle-header .dongle-title {
-    font-size: 15px;
+.panel-hdr .title {
+    font-size: 14px;
     font-weight: 700;
     color: #ffffff;
     letter-spacing: 1px;
 }
 
-.dongle-header .dongle-meta {
-    font-size: 11px;
+.panel-hdr .freq-label {
+    font-size: 12px;
     color: #888;
-    margin-top: 2px;
+    margin-top: 1px;
 }
 
-.dongle-header .live-badge {
+.panel-hdr .badge {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 5px;
     font-size: 11px;
     font-weight: 700;
     letter-spacing: 1px;
-    padding: 4px 12px;
+    padding: 2px 8px;
     border-radius: 4px;
     background: rgba(50, 50, 50, 0.6);
     color: #666;
     text-transform: uppercase;
 }
 
-.dongle-header .live-badge.active {
+.panel-hdr .badge.active {
     background: rgba(0, 255, 100, 0.15);
     color: #00ff88;
     animation: pulse 1.5s infinite;
     box-shadow: 0 0 12px rgba(0, 255, 100, 0.3);
 }
 
-.dongle-header .live-badge .dot {
-    width: 8px;
-    height: 8px;
+.panel-hdr .badge .dot {
+    width: 6px;
+    height: 6px;
     border-radius: 50%;
     background: #444;
 }
 
-.dongle-header .live-badge.active .dot {
+.panel-hdr .badge.active .dot {
     background: #00ff88;
-    box-shadow: 0 0 8px #00ff88;
+    box-shadow: 0 0 6px #00ff88;
 }
 
-.dongle-channels {
+.panel-body {
     flex: 1;
-    padding: 12px 16px;
+    padding: 6px 10px;
     display: flex;
     flex-direction: column;
-    gap: 10px;
+    gap: 4px;
     overflow: hidden;
-}
-
-/* ── CHANNEL CARD ── */
-.channel-card {
-    background: #1a1a2e;
-    border: 1px solid #2a2a4e;
-    border-radius: 6px;
-    padding: 14px 18px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
     min-height: 0;
 }
 
-.channel-top {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-}
-
-.channel-top .left {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-.freq-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 700;
-    color: #0a0a0a;
-    letter-spacing: 0.5px;
-}
-
-.channel-name {
-    font-size: 14px;
-    font-weight: 600;
-    color: #ffffff;
-}
-
-.channel-status {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 1px;
-    text-transform: uppercase;
-}
-
-.channel-status .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-}
-
-.channel-status.idle .dot { background: #444; }
-.channel-status.idle { color: #555; }
-
-/* ── SPARKLINE ── */
-.channel-sparkline {
+/* -- FREQ PANEL SPARKLINE -- */
+.freq-sparkline {
     display: flex;
     align-items: flex-end;
     gap: 1px;
     height: 28px;
     padding: 2px 0;
+    flex-shrink: 0;
 }
 
 .spark-bar {
     flex: 1;
     min-width: 0;
     border-radius: 1px 1px 0 0;
-    background: #2a2a4e;
     min-height: 1px;
 }
 
-.channel-meta {
+/* -- FREQ PANEL STATS ROW -- */
+.freq-stats {
     display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 10px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.channel-meta .last-active {
-    color: #888;
-}
-
-.channel-meta .last-active.recent {
-    color: #aaa;
-}
-
-.sparkline-label {
-    font-size: 9px;
-    color: #555;
-    text-align: right;
-}
-
-.channel-bottom {
-    display: flex;
-    align-items: center;
     justify-content: space-between;
-}
-
-.squelch-count {
+    align-items: center;
     font-size: 11px;
     color: #888;
+    padding: 2px 0;
+    flex-shrink: 0;
+    border-bottom: 1px solid #1a1a2e;
 }
 
-.squelch-count span {
+.freq-stats .total {
     color: #ccc;
     font-weight: 700;
 }
 
-/* ── ACTIVITY TIMELINE ── */
-#timeline-section {
-    padding: 0 24px;
-    height: 130px;
+.freq-stats .last-heard {
+    color: #aaa;
 }
 
-#timeline-section .section-label {
-    font-size: 11px;
-    color: #666;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    margin-bottom: 6px;
-}
-
-#timeline-wrap {
-    background: #111122;
-    border: 1px solid #2a2a4e;
-    border-radius: 6px;
-    padding: 10px 16px 6px 16px;
-    height: 104px;
-    display: flex;
-    flex-direction: column;
-}
-
-#timeline-bars {
-    flex: 1;
-    display: flex;
-    align-items: flex-end;
-    gap: 2px;
-}
-
-.timeline-bar {
-    flex: 1;
-    min-width: 0;
-    border-radius: 2px 2px 0 0;
-    transition: height 0.5s ease;
-    position: relative;
-}
-
-.timeline-bar:hover::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    background: #222;
-    color: #fff;
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 3px;
-    white-space: nowrap;
-    z-index: 10;
-}
-
-#timeline-labels {
-    display: flex;
-    justify-content: space-between;
-    font-size: 10px;
+.freq-stats .last-heard.stale {
     color: #555;
-    margin-top: 4px;
-    padding: 0 2px;
 }
 
-/* ── BOTTOM SPLIT ── */
-#bottom {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    padding: 12px 24px 16px 24px;
-    height: 280px;
-}
-
-.bottom-panel {
-    background: #111122;
-    border: 1px solid #2a2a4e;
-    border-radius: 6px;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-}
-
-.panel-header {
-    padding: 10px 18px;
-    font-size: 12px;
-    font-weight: 700;
-    color: #888;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    background: #0d0d1a;
-    border-bottom: 1px solid #2a2a4e;
-}
-
-/* ── STATS + HEALTH ── */
-#stats-health {
-    padding: 12px 18px;
+/* -- FREQ PANEL TX HISTORY -- */
+.tx-history {
     flex: 1;
+    overflow: hidden;
     display: flex;
     flex-direction: column;
     gap: 0;
-    overflow: hidden;
+    min-height: 0;
 }
 
-.stat-row {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 5px 0;
-    border-bottom: 1px solid #1a1a2e;
-}
-
-.stat-row:last-child { border-bottom: none; }
-
-.stat-label {
-    font-size: 12px;
-    color: #888;
-}
-
-.stat-value {
-    font-size: 13px;
-    color: #e0e0e0;
-    font-weight: 600;
-}
-
-.stat-separator {
-    height: 1px;
-    background: #2a2a4e;
-    margin: 4px 0;
-}
-
-.disk-bar-wrap {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.disk-bar-track {
-    width: 80px;
-    height: 8px;
-    background: #0d0d1a;
-    border-radius: 4px;
-    overflow: hidden;
-}
-
-.disk-bar-fill {
-    height: 100%;
-    background: #00bfff;
-    border-radius: 4px;
-    transition: width 0.5s ease;
-}
-
-/* ── RECENT TRANSMISSIONS ── */
-#tx-list {
-    flex: 1;
-    overflow: hidden;
-    padding: 0;
-}
-
-.tx-row {
+.tx-history-hdr {
     display: grid;
-    grid-template-columns: 80px 90px 1fr 60px;
-    gap: 12px;
-    align-items: center;
-    padding: 5px 18px;
-    font-size: 12px;
-    border-bottom: 1px solid rgba(42, 42, 78, 0.4);
+    grid-template-columns: 80px 1fr;
+    gap: 8px;
+    padding: 4px 8px;
+    font-size: 9px;
+    font-weight: 700;
+    color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-bottom: 1px solid #2a2a4e;
+    flex-shrink: 0;
 }
 
-.tx-row.header {
+.tx-entry {
+    display: grid;
+    grid-template-columns: 80px 1fr;
+    gap: 8px;
+    padding: 3px 8px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(42, 42, 78, 0.3);
+}
+
+.tx-entry.new-entry {
+    animation: flash 1.5s ease-out;
+}
+
+.tx-entry .time { color: #aaa; }
+.tx-entry .dur { color: #ccc; text-align: right; }
+
+.tx-empty {
+    padding: 12px 8px;
+    color: #555;
+    font-size: 12px;
+    text-align: center;
+}
+
+/* -- ADS-B TABLE -- */
+.adsb-hdr {
+    display: grid;
+    grid-template-columns: 100px 70px 65px 65px 55px 55px;
+    gap: 6px;
+    padding: 6px 10px;
     background: #0d0d1a;
     color: #555;
     font-weight: 700;
@@ -449,28 +287,71 @@ html, body {
     letter-spacing: 1px;
     font-size: 10px;
     border-bottom: 1px solid #2a2a4e;
+    flex-shrink: 0;
 }
 
-.tx-row.new-entry {
-    animation: flash 1.5s ease-out;
+.adsb-row {
+    display: grid;
+    grid-template-columns: 100px 70px 65px 65px 55px 55px;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(42, 42, 78, 0.3);
+    align-items: center;
 }
 
-.tx-time {
-    color: #aaa;
-}
+.adsb-row:hover { background: rgba(34, 211, 238, 0.05); }
 
-.tx-freq {
-    font-weight: 700;
+.adsb-callsign { color: #22d3ee; font-weight: 700; }
+.adsb-alt { color: #ccc; }
+.adsb-spd { color: #aaa; }
+.adsb-dist { color: #ccc; }
+.adsb-rssi { color: #888; }
+.adsb-sqk { color: #888; font-size: 10px; }
+.adsb-sqk.emergency { color: #ff3333; font-weight: 700; }
+
+.adsb-empty {
+    padding: 12px 8px;
+    color: #555;
     font-size: 12px;
+    text-align: center;
 }
 
-.tx-name {
-    color: #ccc;
+/* -- ACARS MESSAGES -- */
+.acars-hdr {
+    display: grid;
+    grid-template-columns: 70px 80px 70px 1fr;
+    gap: 6px;
+    padding: 6px 10px;
+    background: #0d0d1a;
+    color: #555;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    font-size: 10px;
+    border-bottom: 1px solid #2a2a4e;
+    flex-shrink: 0;
 }
 
-.tx-dur {
-    color: #888;
-    text-align: right;
+.acars-row {
+    display: grid;
+    grid-template-columns: 70px 80px 70px 1fr;
+    gap: 6px;
+    padding: 4px 10px;
+    font-size: 13px;
+    border-bottom: 1px solid rgba(42, 42, 78, 0.3);
+}
+
+.acars-time { color: #aaa; }
+.acars-flight { color: #f59e0b; font-weight: 700; }
+.acars-tail { color: #888; }
+.acars-text { color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.acars-empty {
+    padding: 12px 8px;
+    color: #555;
+    font-size: 12px;
+    text-align: center;
 }
 </style>
 </head>
@@ -478,7 +359,7 @@ html, body {
 
 <!-- TITLE BAR -->
 <div id="title-bar">
-    <h1>SPACENODES AVIATION SDR AIRBAND MONITOR</h1>
+    <h1>SPACENODES AVIATION SDR MONITOR</h1>
     <div class="right">
         <span id="conn-error">NO SIGNAL</span>
         <span id="uptime">--</span>
@@ -486,104 +367,60 @@ html, body {
     </div>
 </div>
 
-<!-- DONGLE PANELS -->
-<div id="dongles">
-    <!-- Dongle 1: DFW Approach -->
-    <div class="dongle-panel" id="dongle-approach">
-        <div class="dongle-header" style="border-left-color: #00bfff;">
+<!-- EMERGENCY BANNER -->
+<div id="emergency-banner"></div>
+
+<!-- MAIN GRID: 3x2 -->
+<div id="main-grid">
+    <!-- Row 1: DFW Approach | ADS-B | ACARS -->
+    <div class="panel" id="panel-freq-0"></div>
+
+    <div class="panel" id="panel-adsb">
+        <div class="panel-hdr" style="border-left-color: #22d3ee;">
             <div>
-                <div class="dongle-title">DONGLE 1 &mdash; DFW APPROACH</div>
-                <div class="dongle-meta">SN:00000001 &bull; 132.922 MHz</div>
+                <div class="title">ADS-B TRACKER</div>
+                <div class="freq-label">SN:00000003 &bull; 1090 MHz</div>
             </div>
-            <div class="live-badge" id="dongle1-badge"><span class="dot"></span>IDLE</div>
+            <div class="badge" id="adsb-badge">
+                <span class="dot"></span>
+                <span id="adsb-count-label">0 AIRCRAFT</span>
+            </div>
         </div>
-        <div class="dongle-channels" id="dongle1-channels"></div>
+        <div class="adsb-hdr">
+            <span>Callsign</span>
+            <span>Alt (ft)</span>
+            <span>Spd (kt)</span>
+            <span>Dist (nm)</span>
+            <span>RSSI</span>
+            <span>Squawk</span>
+        </div>
+        <div class="panel-body" id="adsb-list" style="padding: 0; gap: 0;"></div>
     </div>
 
-    <!-- Dongle 2: Multichannel Scanner -->
-    <div class="dongle-panel" id="dongle-scanner">
-        <div class="dongle-header" style="border-left-color: #a855f7;">
+    <div class="panel" id="panel-acars">
+        <div class="panel-hdr" style="border-left-color: #f59e0b;">
             <div>
-                <div class="dongle-title">DONGLE 2 &mdash; MULTICHANNEL SCANNER</div>
-                <div class="dongle-meta">SN:00000002 &bull; Center 125.425 MHz</div>
+                <div class="title">ACARS DECODER</div>
+                <div class="freq-label">SN:00000004 &bull; 131.550 MHz</div>
             </div>
-            <div class="live-badge" id="dongle2-badge"><span class="dot"></span>IDLE</div>
+            <div class="badge" id="acars-badge"><span class="dot"></span>LISTENING</div>
         </div>
-        <div class="dongle-channels" id="dongle2-channels"></div>
-    </div>
-</div>
-
-<!-- ACTIVITY TIMELINE -->
-<div id="timeline-section">
-    <div class="section-label">Activity Timeline &mdash; Last 6 Hours</div>
-    <div id="timeline-wrap">
-        <div id="timeline-bars"></div>
-        <div id="timeline-labels"></div>
-    </div>
-</div>
-
-<!-- BOTTOM SPLIT -->
-<div id="bottom">
-    <!-- Stats + Health -->
-    <div class="bottom-panel">
-        <div class="panel-header">Stats &amp; System Health</div>
-        <div id="stats-health">
-            <div class="stat-row">
-                <span class="stat-label">Today's Transmissions</span>
-                <span class="stat-value" id="st-today">--</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Top Channel</span>
-                <span class="stat-value" id="st-top">--</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Pipeline Total (Ops Center)</span>
-                <span class="stat-value" id="st-pipeline">--</span>
-            </div>
-            <div class="stat-separator"></div>
-            <div class="stat-row">
-                <span class="stat-label">Pi Temperature</span>
-                <span class="stat-value" id="st-temp">--</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">CPU Load</span>
-                <span class="stat-value" id="st-cpu">--</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">RAM</span>
-                <span class="stat-value" id="st-ram">--</span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Disk Usage</span>
-                <span class="stat-value">
-                    <span class="disk-bar-wrap">
-                        <span class="disk-bar-track"><span class="disk-bar-fill" id="st-disk-bar"></span></span>
-                        <span id="st-disk-pct">--%</span>
-                    </span>
-                </span>
-            </div>
-            <div class="stat-row">
-                <span class="stat-label">Icecast Mounts</span>
-                <span class="stat-value" id="st-icecast">--</span>
-            </div>
-        </div>
-    </div>
-
-    <!-- Recent Transmissions -->
-    <div class="bottom-panel">
-        <div class="panel-header">Recent Transmissions</div>
-        <div class="tx-row header">
+        <div class="acars-hdr">
             <span>Time</span>
-            <span>Frequency</span>
-            <span>Channel</span>
-            <span style="text-align:right">Duration</span>
+            <span>Flight</span>
+            <span>Reg</span>
+            <span>Message</span>
         </div>
-        <div id="tx-list"></div>
+        <div class="panel-body" id="acars-list" style="padding: 0; gap: 0;"></div>
     </div>
+
+    <!-- Row 2: Regional Approach | DFW Departure | DFW Clearance -->
+    <div class="panel" id="panel-freq-1"></div>
+    <div class="panel" id="panel-freq-2"></div>
+    <div class="panel" id="panel-freq-3"></div>
 </div>
 
 <script>
-// ── CONSTANTS ──
 const CHANNEL_COLORS = {
     'DFW Approach': '#00bfff',
     'Regional Approach': '#a855f7',
@@ -592,26 +429,19 @@ const CHANNEL_COLORS = {
 };
 
 const DEFAULT_COLOR = '#00bfff';
-const TIMELINE_HOURS = 6;
-const TIMELINE_BUCKET_MIN = 10;
-const TX_DISPLAY_COUNT = 15;
+const EMERGENCY_SQUAWKS = new Set(['7500', '7600', '7700']);
 
-let lastTxIds = new Set();
+// Track previous state for new-entry detection
+let prevTxCounts = {};
+let prevSquelch = {};
 let initialized = false;
-let prevSquelch = {};  // Track previous squelch counts for delta detection
 
-// ── HELPERS ──
 function getColor(name) {
     return CHANNEL_COLORS[name] || DEFAULT_COLOR;
 }
 
-function cToF(c) {
-    return (c * 9 / 5) + 32;
-}
-
-function formatTemp(c) {
-    const f = cToF(c);
-    return `${f.toFixed(0)}\u00b0F (${c.toFixed(1)}\u00b0C)`;
+function fmtNum(n) {
+    return n != null ? n.toLocaleString() : '--';
 }
 
 function formatLastActive(secs) {
@@ -622,251 +452,183 @@ function formatLastActive(secs) {
     return `${Math.floor(secs / 3600)}h ago`;
 }
 
-// ── BUILD CHANNEL CARD HTML ──
-function buildChannelCard(ch) {
-    const color = getColor(ch.name);
-    const sparkline = ch.sparkline || [];
+// -- BUILD FREQUENCY PANEL --
+function buildFreqPanel(ch, panelId) {
+    const panel = document.getElementById(panelId);
+    if (!panel) return;
 
-    // Squelch delta detection — LIVE if squelch count increased since last poll
+    const color = getColor(ch.name);
     const prevCount = prevSquelch[ch.name];
     const squelchDelta = (prevCount != null && ch.squelch_opens > prevCount);
     const isActive = ch.active === true || squelchDelta;
     const statusText = isActive ? 'LIVE' : 'IDLE';
 
-    const liveDotStyle = isActive
-        ? `background:${color}; box-shadow: 0 0 8px ${color};`
+    // Header
+    const dotStyle = isActive
+        ? `background:${color}; box-shadow: 0 0 6px ${color};`
         : 'background:#444;';
-    const liveTextStyle = isActive
-        ? `color:${color}; animation: pulse 1.5s infinite;`
-        : 'color:#555;';
+    const badgeClass = isActive ? 'badge active' : 'badge';
 
-    // Build sparkline bars
+    // Sparkline
+    const sparkline = ch.sparkline || [];
     const maxSpark = Math.max(1, ...sparkline);
     let sparkHtml = '';
     for (let i = 0; i < sparkline.length; i++) {
         const val = sparkline[i];
         const h = val > 0 ? Math.max(3, Math.round((val / maxSpark) * 24)) : 1;
-        const opacity = val > 0 ? 0.9 : 0.15;
         const barColor = val > 0 ? color : '#2a2a4e';
+        const opacity = val > 0 ? 0.9 : 0.15;
         sparkHtml += `<div class="spark-bar" style="height:${h}px;background:${barColor};opacity:${opacity};"></div>`;
     }
 
-    // Last active text
-    const lastActiveText = formatLastActive(ch.last_active_secs);
-    const lastActiveClass = (ch.last_active_secs != null && ch.last_active_secs < 120) ? 'last-active recent' : 'last-active';
+    // Last heard
+    const lastText = formatLastActive(ch.last_active_secs);
+    const staleClass = (ch.last_active_secs == null || ch.last_active_secs > 300) ? 'last-heard stale' : 'last-heard';
 
-    // Active card glow
-    const cardBorder = isActive ? `border-color: ${color}; box-shadow: 0 0 8px ${color}33;` : '';
+    // History
+    const history = ch.history || [];
+    const prevTxCount = prevTxCounts[ch.name] || 0;
+    let historyHtml = '';
+    if (history.length === 0) {
+        historyHtml = '<div class="tx-empty">No transmissions yet</div>';
+    } else {
+        historyHtml = `<div class="tx-history-hdr"><span>Time</span><span style="text-align:right">Duration</span></div>`;
+        history.forEach((tx, i) => {
+            const isNew = initialized && i === 0 && history.length > prevTxCount;
+            const cls = isNew ? 'tx-entry new-entry' : 'tx-entry';
+            historyHtml += `<div class="${cls}">
+                <span class="time">${tx.timestamp}</span>
+                <span class="dur">${tx.duration}s</span>
+            </div>`;
+        });
+    }
 
-    return `
-    <div class="channel-card" data-channel="${ch.name}" style="${cardBorder}">
-        <div class="channel-top">
-            <div class="left">
-                <span class="freq-badge" style="background:${color}">${ch.freq}</span>
-                <span class="channel-name">${ch.name}</span>
+    panel.innerHTML = `
+        <div class="panel-hdr" style="border-left-color: ${color};">
+            <div>
+                <div class="title">${ch.name.toUpperCase()}</div>
+                <div class="freq-label">${ch.freq} MHz</div>
             </div>
-            <div class="channel-status ${isActive ? 'live' : 'idle'}" style="${liveTextStyle}">
-                <span class="dot" style="${liveDotStyle}"></span>${statusText}
+            <div class="${badgeClass}">
+                <span class="dot" style="${dotStyle}"></span>${statusText}
             </div>
         </div>
-        <div class="channel-sparkline">${sparkHtml}</div>
-        <div class="channel-meta">
-            <span class="squelch-count">Squelch: <span style="color:#ccc;font-weight:700">${ch.squelch_opens.toLocaleString()}</span></span>
-            <span class="${lastActiveClass}">${lastActiveText}</span>
-            <span class="sparkline-label">30 min</span>
-        </div>
-    </div>`;
+        <div class="panel-body">
+            <div class="freq-sparkline">${sparkHtml}</div>
+            <div class="freq-stats">
+                <span>Total: <span class="total">${ch.squelch_opens.toLocaleString()}</span></span>
+                <span class="${staleClass}">Last: ${lastText}</span>
+            </div>
+            <div class="tx-history">${historyHtml}</div>
+        </div>`;
+
+    prevSquelch[ch.name] = ch.squelch_opens;
+    prevTxCounts[ch.name] = history.length;
 }
 
-// ── UPDATE FUNCTIONS ──
-function updateClock(data) {
-    document.getElementById('clock').textContent = data.clock || '--:--:--';
-    document.getElementById('uptime').textContent = data.uptime ? `UP ${data.uptime}` : '--';
+// -- UPDATE CHANNELS --
+function updateChannels(channels) {
+    if (!channels) return;
+    // Map channels to panels: index 0=DFW Approach, 1=Regional, 2=Departure, 3=Clearance
+    channels.forEach((ch, i) => {
+        buildFreqPanel(ch, `panel-freq-${i}`);
+    });
 }
 
-function updateDongles(dongles) {
-    if (!dongles) return;
+// -- ADS-B --
+function updateAdsb(adsb) {
+    if (!adsb) return;
 
-    // Collect all channels to check squelch deltas
-    const allChannels = [];
+    const count = adsb.count || 0;
+    const badge = document.getElementById('adsb-badge');
+    const label = document.getElementById('adsb-count-label');
 
-    // Approach dongle
-    const approach = dongles.approach;
-    if (approach) {
-        allChannels.push(...approach.channels);
-        const container = document.getElementById('dongle1-channels');
-        container.innerHTML = approach.channels.map(buildChannelCard).join('');
-        const anyActive = approach.channels.some(c => {
-            const prev = prevSquelch[c.name];
-            return c.active || (prev != null && c.squelch_opens > prev);
-        });
-        const badge = document.getElementById('dongle1-badge');
-        badge.className = 'live-badge' + (anyActive ? ' active' : '');
-        badge.innerHTML = `<span class="dot"></span>${anyActive ? 'LIVE' : 'IDLE'}`;
+    label.textContent = `${count} AIRCRAFT`;
+    badge.className = 'badge' + (count > 0 ? ' active' : '');
+    badge.querySelector('.dot').style.cssText = count > 0
+        ? 'background:#22d3ee; box-shadow: 0 0 6px #22d3ee;'
+        : 'background:#444;';
+
+    const list = document.getElementById('adsb-list');
+    const aircraft = adsb.aircraft || [];
+
+    if (aircraft.length === 0) {
+        list.innerHTML = '<div class="adsb-empty">No aircraft detected</div>';
+        return;
     }
-
-    // Scanner dongle
-    const scanner = dongles.scanner;
-    if (scanner) {
-        allChannels.push(...scanner.channels);
-        const container = document.getElementById('dongle2-channels');
-        container.innerHTML = scanner.channels.map(buildChannelCard).join('');
-        const anyActive = scanner.channels.some(c => {
-            const prev = prevSquelch[c.name];
-            return c.active || (prev != null && c.squelch_opens > prev);
-        });
-        const badge = document.getElementById('dongle2-badge');
-        badge.className = 'live-badge' + (anyActive ? ' active' : '');
-        badge.innerHTML = `<span class="dot"></span>${anyActive ? 'LIVE' : 'IDLE'}`;
-    }
-
-    // Update previous squelch counts for next poll delta check
-    for (const ch of allChannels) {
-        prevSquelch[ch.name] = ch.squelch_opens;
-    }
-}
-
-function updateTimeline(transmissions) {
-    const barsContainer = document.getElementById('timeline-bars');
-    const labelsContainer = document.getElementById('timeline-labels');
-
-    const now = new Date();
-    const bucketCount = (TIMELINE_HOURS * 60) / TIMELINE_BUCKET_MIN; // 36 buckets
-    const buckets = new Array(bucketCount).fill(null).map(() => ({}));
-
-    // Parse transmissions and assign to buckets
-    if (transmissions && transmissions.length > 0) {
-        transmissions.forEach(tx => {
-            const parts = tx.timestamp.split(':');
-            if (parts.length < 3) return;
-            const txDate = new Date();
-            txDate.setHours(parseInt(parts[0]), parseInt(parts[1]), parseInt(parts[2]), 0);
-
-            // If the time is in the future, it was yesterday
-            if (txDate > now) txDate.setDate(txDate.getDate() - 1);
-
-            const diffMs = now - txDate;
-            const diffMin = diffMs / 60000;
-
-            if (diffMin >= 0 && diffMin < TIMELINE_HOURS * 60) {
-                const bucketIdx = bucketCount - 1 - Math.floor(diffMin / TIMELINE_BUCKET_MIN);
-                if (bucketIdx >= 0 && bucketIdx < bucketCount) {
-                    const name = tx.name || 'Unknown';
-                    buckets[bucketIdx][name] = (buckets[bucketIdx][name] || 0) + 1;
-                }
-            }
-        });
-    }
-
-    // Find max for scaling
-    const totals = buckets.map(b => Object.values(b).reduce((s, v) => s + v, 0));
-    const maxCount = Math.max(1, ...totals);
-    const maxBarHeight = 60;
-
-    // Build bars
-    let barsHtml = '';
-    for (let i = 0; i < bucketCount; i++) {
-        const total = totals[i];
-        const height = total > 0 ? Math.max(3, (total / maxCount) * maxBarHeight) : 2;
-
-        // Determine dominant channel color for this bucket
-        let dominantColor = '#2a2a4e';
-        if (total > 0) {
-            let maxName = '';
-            let maxVal = 0;
-            for (const [name, count] of Object.entries(buckets[i])) {
-                if (count > maxVal) { maxVal = count; maxName = name; }
-            }
-            dominantColor = getColor(maxName);
-        }
-
-        const opacity = total > 0 ? 0.8 : 0.2;
-        const tooltip = `${total} tx`;
-        barsHtml += `<div class="timeline-bar" style="height:${height}px; background:${dominantColor}; opacity:${opacity};" data-tooltip="${tooltip}"></div>`;
-    }
-    barsContainer.innerHTML = barsHtml;
-
-    // Build time labels (show every hour)
-    let labelsHtml = '';
-    for (let h = TIMELINE_HOURS; h >= 0; h--) {
-        const labelTime = new Date(now.getTime() - h * 3600000);
-        const hh = String(labelTime.getHours()).padStart(2, '0');
-        const mm = String(labelTime.getMinutes()).padStart(2, '0');
-        labelsHtml += `<span>${hh}:${mm}</span>`;
-    }
-    labelsContainer.innerHTML = labelsHtml;
-}
-
-function updateStats(stats) {
-    if (!stats) return;
-    document.getElementById('st-today').textContent = (stats.today_total || 0).toLocaleString();
-    document.getElementById('st-top').textContent = stats.top_channel
-        ? `${stats.top_channel} (${stats.top_count})`
-        : '--';
-    document.getElementById('st-pipeline').textContent = (stats.pipeline_total || 0).toLocaleString();
-}
-
-function updateHealth(health) {
-    if (!health) return;
-
-    document.getElementById('st-temp').textContent = health.temp_c != null
-        ? formatTemp(health.temp_c)
-        : '--';
-
-    document.getElementById('st-cpu').textContent = health.cpu_load != null
-        ? `${(health.cpu_load * 100).toFixed(0)}%`
-        : '--';
-
-    document.getElementById('st-ram').textContent = (health.ram_used_mb != null && health.ram_total_mb != null)
-        ? `${health.ram_used_mb} MB / ${health.ram_total_mb} MB`
-        : '--';
-
-    const diskPct = health.disk_percent || 0;
-    document.getElementById('st-disk-pct').textContent = `${diskPct}%`;
-    document.getElementById('st-disk-bar').style.width = `${diskPct}%`;
-
-    // Color disk bar by usage
-    const diskBar = document.getElementById('st-disk-bar');
-    if (diskPct > 85) diskBar.style.background = '#ff3333';
-    else if (diskPct > 70) diskBar.style.background = '#ff6b35';
-    else diskBar.style.background = '#00bfff';
-
-    document.getElementById('st-icecast').textContent = health.icecast_mounts != null
-        ? health.icecast_mounts
-        : '--';
-}
-
-function updateTransmissions(transmissions) {
-    if (!transmissions) return;
-
-    const list = document.getElementById('tx-list');
-    const display = transmissions.slice(0, TX_DISPLAY_COUNT);
-
-    // Build set of current tx IDs for detecting new entries
-    const currentIds = new Set(display.map(tx => `${tx.timestamp}-${tx.frequency}`));
-    const isNew = id => initialized && !lastTxIds.has(id);
 
     let html = '';
-    display.forEach(tx => {
-        const color = getColor(tx.name);
-        const id = `${tx.timestamp}-${tx.frequency}`;
-        const newClass = isNew(id) ? ' new-entry' : '';
-        const dur = tx.duration != null ? `${tx.duration.toFixed(1)}s` : '--';
+    for (const a of aircraft) {
+        const isEmergency = EMERGENCY_SQUAWKS.has(a.squawk);
+        const sqkClass = isEmergency ? 'adsb-sqk emergency' : 'adsb-sqk';
+        const stale = a.seen > 15;
+        const rowOpacity = stale ? 'opacity: 0.4;' : '';
 
-        html += `<div class="tx-row${newClass}">
-            <span class="tx-time">${tx.timestamp}</span>
-            <span class="tx-freq" style="color:${color}">${tx.frequency}</span>
-            <span class="tx-name">${tx.name}</span>
-            <span class="tx-dur">${dur}</span>
+        html += `<div class="adsb-row" style="${rowOpacity}">
+            <span class="adsb-callsign">${a.flight || a.hex}</span>
+            <span class="adsb-alt">${fmtNum(a.alt)}</span>
+            <span class="adsb-spd">${a.speed != null ? Math.round(a.speed) : '--'}</span>
+            <span class="adsb-dist">${a.distance != null ? a.distance.toFixed(1) : '--'}</span>
+            <span class="adsb-rssi">${a.rssi != null ? a.rssi.toFixed(1) : '--'}</span>
+            <span class="${sqkClass}">${a.squawk || '--'}</span>
         </div>`;
-    });
-
+    }
     list.innerHTML = html;
-    lastTxIds = currentIds;
-    initialized = true;
 }
 
-// ── MAIN FETCH ──
+// -- ACARS --
+function updateAcars(acars) {
+    const list = document.getElementById('acars-list');
+    const badge = document.getElementById('acars-badge');
+
+    if (!acars || acars.length === 0) {
+        list.innerHTML = '<div class="acars-empty">No messages decoded yet &mdash; listening on 4 frequencies</div>';
+        badge.className = 'badge';
+        badge.innerHTML = '<span class="dot"></span>LISTENING';
+        return;
+    }
+
+    badge.className = 'badge active';
+    badge.innerHTML = `<span class="dot" style="background:#f59e0b; box-shadow: 0 0 6px #f59e0b;"></span>${acars.length} MSG`;
+
+    let html = '';
+    for (const m of acars) {
+        html += `<div class="acars-row">
+            <span class="acars-time">${m.timestamp}</span>
+            <span class="acars-flight">${m.flight || '--'}</span>
+            <span class="acars-tail">${m.tail || '--'}</span>
+            <span class="acars-text">${m.text || m.label || '--'}</span>
+        </div>`;
+    }
+    list.innerHTML = html;
+}
+
+// -- EMERGENCIES --
+function updateEmergencies(emergencies) {
+    const banner = document.getElementById('emergency-banner');
+    if (!emergencies || emergencies.length === 0) {
+        banner.style.display = 'none';
+        return;
+    }
+    banner.style.display = 'block';
+    const alerts = emergencies.map(e => {
+        const dist = e.distance ? ` ${e.distance}nm` : '';
+        return `SQUAWK ${e.squawk} ${e.type} — ${e.flight} ${e.alt}ft${dist}`;
+    });
+    banner.textContent = alerts.join(' | ');
+
+    const rows = document.querySelectorAll('.adsb-row');
+    const eFlights = new Set(emergencies.map(e => e.flight));
+    rows.forEach(row => {
+        const callsign = row.querySelector('.adsb-callsign');
+        if (callsign && eFlights.has(callsign.textContent.trim())) {
+            row.style.background = 'rgba(255, 0, 0, 0.2)';
+            row.style.borderLeft = '3px solid #ff0000';
+        }
+    });
+}
+
+// -- MAIN FETCH --
 async function fetchStats() {
     try {
         const res = await fetch('/api/stats');
@@ -875,15 +637,18 @@ async function fetchStats() {
 
         document.getElementById('conn-error').style.display = 'none';
 
-        updateClock(data);
-        updateDongles(data.dongles);
-        updateTimeline(data.recent_transmissions);
-        updateStats(data.stats);
-        updateHealth(data.health);
-        updateTransmissions(data.recent_transmissions);
+        // Clock + uptime
+        document.getElementById('clock').textContent = data.clock || '--:--:--';
+        document.getElementById('uptime').textContent = data.uptime ? `UP ${data.uptime}` : '--';
+
+        updateChannels(data.channels);
+        updateAdsb(data.adsb);
+        updateAcars(data.acars);
+        updateEmergencies(data.emergencies);
+
+        initialized = true;
     } catch (e) {
         document.getElementById('conn-error').style.display = 'inline';
-        // Fall back to local clock
         const now = new Date();
         document.getElementById('clock').textContent =
             String(now.getHours()).padStart(2, '0') + ':' +

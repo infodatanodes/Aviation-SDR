@@ -12,49 +12,48 @@ Aviation frequency monitoring using RTL-SDR on Raspberry Pi. Tracks aircraft, de
 |-----------|-----------|----------|--------|
 | ADS-B tracking | 1090 MHz | Mode S Extended Squitter | **ACTIVE** — readsb on Pi, local feed to Spacenodes, tar1090 web map working |
 | VHF Airband | 118-137 MHz | AM voice | **ACTIVE** — RTLSDR-Airband multichannel mode, 4 DFW freqs (2 dongles), integrated into Spacenodes map |
-| UAT tracking | 978 MHz | Universal Access Transceiver | **ACTIVE** — dump978-fa on RTL-SDR Blog V4 (SN:00000002), JSON on port 30979, raw on port 30978. V4 needed for FM notch filter — V3 overloaded by FM broadcast indoors. Indoor 978 antenna insufficient for FIS-B ground stations — needs outdoor mounting. |
-| ACARS decoding | 131.55/131.45/131.475/131.725 MHz | VHF data link | **ACTIVE** — acarsdec on old RTL2838UHIDIR (SN:00000104), 4 ACARS freqs, parsed positions/routes fed to Spacenodes |
+| UAT tracking | 978 MHz | Universal Access Transceiver | **DISABLED** — dump978-fa disabled 2026-03-13 (V4 SN:002 freed up, could be re-enabled). V4 needed for FM notch filter — V3 overloaded by FM broadcast indoors. Indoor 978 antenna insufficient for FIS-B ground stations — needs outdoor mounting. |
+| ACARS decoding | 130.025/130.425/130.450/131.550/131.725 MHz | VHF data link | **ACTIVE** — acarsdec on old RTL2838UHIDIR (SN:00000104) + wideband LNA, gain 42, 5 North America ACARS freqs, parsed positions/routes fed to Spacenodes |
 | UHF Military | 225-400 MHz | AM voice | Not started |
 
 ## Hardware (On Pi #2 — pi-scanner, 100.68.206.39)
 
-### RF Signal Chain
+### RF Signal Chain (as of 2026-03-13)
 ```
 D3000 Discone Antenna (25-1300 MHz, mounted outside)
         │
    50ft LMR-400 coax (N to SMA)
         │
-   XRDS-RF 2-Way Splitter (3 dB, SMA, 50Ω)
-        │
-   ┌────┴────┐
-   OUT1      OUT2        (SMA jumpers)
-   │         │
-   V4 #1     V4 #2
-   SN:001    SN:002
-   Approach  Scanner
-   132.922   3 freqs (multichannel)
+   V4 #3 (SN:003) — ADS-B 1090 MHz — readsb, gain 42.1
 
-   V4 #3 (SN:003) — ADS-B 1090 MHz — on D3000 directly (no splitter)
-   Old RTL2838UHIDIR (SN:004) — ACARS 131.55 MHz — on Bingfu indoor antenna
+Bingfu Indoor Antenna
+        │
+   RTL-SDR Blog Wideband LNA (SPF5189Z, +20 dB)
+        │
+   RTL2838UHIDIR (SN:104) — ACARS 5 NA freqs — acarsdec, gain 42
+
+V4 #1 (SN:001) — Unplugged (was Approach)
+V4 #2 (SN:002) — Available (freed from ACARS — V4 bad for VHF)
+V3 (SN:105) — Unplugged (was multichannel scanner)
 ```
 
-**Antenna setup (March 10, 2026):** Each dongle has a dedicated antenna. Splitters removed — wideband frequency differences made splitting impractical, and the LNA was hurting ADS-B performance. D3000 discone feeds ADS-B directly. VHF airband dongles use dedicated Bingfu antennas and scanner antenna. LNA disconnected (overloaded ADS-B at 1090 MHz, limited range to 12nm; without it: 40+ nm).
+**Antenna setup (updated 2026-03-13):** D3000 discone feeds ADS-B (V4 SN:003) directly via LMR-400. ACARS uses Bingfu indoor antenna → wideband LNA → old RTL2838 (SN:104). LNA removed from ADS-B path (overloaded at 1090 MHz, limited range to 12nm; without it: 40+ nm). VHF airband dongles (currently unplugged) had dedicated Bingfu antennas.
 
 ### Installed Hardware
 | Item | Status | Notes |
 |------|--------|-------|
-| RTL-SDR Blog V4 (SN: 00000001) | **Active** | Dedicated DFW Approach 132.922 MHz |
-| RTL-SDR Blog V4 (SN: 00000002) | **Active** | UAT 978 MHz — dump978-fa, HzFitInc 978 antenna at ceiling |
+| RTL-SDR Blog V4 (SN: 00000001) | **Unplugged** | Was DFW Approach 132.922 MHz |
+| RTL-SDR Blog V4 (SN: 00000002) | **Available** | Freed up 2026-03-13 — V4 NOT suitable for VHF ACARS (see Lessons Learned). Could be re-enabled for UAT 978 MHz. |
 | RTL-SDR Blog V4 (SN: 00000003) | **Active** | ADS-B 1090 MHz — readsb, feeds Spacenodes via local API |
-| RTL2838UHIDIR (SN: 00000104) | **Active** | ACARS 131.55 MHz — old generic dongle (Realtek), acarsdec |
-| RTL2838UHIDIR V3 (SN: 00000105) | **Active** | Multichannel scanner — 124.300/125.025/126.550 MHz, rtl-airband-scan |
+| RTL2838UHIDIR (SN: 00000104) | **Active** | ACARS 5 NA freqs — acarsdec, gain 42, with wideband LNA inline. Old R820T tuner outperforms V4 on VHF. |
+| RTL2838UHIDIR V3 (SN: 00000105) | **Unplugged** | Was multichannel scanner — 124.300/125.025/126.550 MHz |
 | D3000 discone antenna | **Connected** | 25-1300 MHz, feeds ADS-B dongle directly (no splitter) |
 | 50ft LMR-400 coax (N to SMA) | **Connected** | Low-loss feed from D3000 to ADS-B dongle |
 | Bingfu antennas | **Connected** | Dedicated antennas for VHF airband dongles (SN:001, SN:002) |
 | Scanner antenna | **Connected** | Additional dedicated antenna for VHF airband |
-| Bingfu indoor antenna | **Connected** | Feeds ACARS dongle (SN:004) |
-| Atolla 7-Port Powered USB Hub (5V/4A) | **Connected** | Powers all 4 dongles |
-| RTL-SDR Blog Wideband LNA | **Disconnected** | Removed — overloaded ADS-B at 1090 MHz (12nm range) |
+| Bingfu indoor antenna | **Connected** | Feeds ACARS dongle (SN:104) via LNA |
+| Atolla 7-Port Powered USB Hub (5V/4A) | **Connected** | Powers dongles |
+| RTL-SDR Blog Wideband LNA (SPF5189Z) | **Connected** | Inline with RTL2838 SN:104 for ACARS. WARNING: Wideband LNA amplifies FM broadcast (+20 dB) near ACARS freq — works with old RTL2838 at gain 42, but NOT with V4 (see Lessons Learned) |
 | XRDS-RF 2-Way Splitter | **Disconnected** | Removed — wideband freq split impractical, each dongle has dedicated antenna |
 | Superbat SMA M-to-M Jumpers (6") | **Spare** | No longer needed with splitter removed |
 
@@ -76,14 +75,14 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 | RTLSDR-Airband (approach) | **Active** | `rtl-airband-approach.service` — dedicated 132.922 MHz, SN:00000001, Icecast `/approach` |
 | RTLSDR-Airband (scanner) | **Active** | `rtl-airband-scan.service` — multichannel 124.300/125.025/126.550 MHz (center 125.425), SN:00000002, Icecast `/scan` |
 | dashboard_server.py | **Active** | `airband-dashboard.service` — HTTP server port 8080, serves dashboard + /api/stats. **Runs from `/home/pi/dashboard/`** (not closecall) |
-| Chromium kiosk | **Active** | `kiosk.service` — Cage + Chromium fullscreen on 15.6" 1080p HDMI, `--remote-debugging-port=9222` for CDP screenshots |
+| Chromium kiosk | **Active** | `kiosk.service` — wrapper (`start_kiosk.sh`) restarts seatd, launches Cage + Chromium via `setsid --wait`, `DBUS_SESSION_BUS_ADDRESS=disabled:`, fullscreen on 15.6" 1080p HDMI, `--remote-debugging-port=9222` for CDP screenshots |
 | airband_display.py | **Retired** | Replaced by dashboard_server.py + kiosk |
 | transfer_recordings.sh | **Active** | Cron every 2 min — SCPs MP3s to main PC `C:/ProScan/Recordings/Aviation-SDR/` |
 | Icecast2 | **Active** | Port 8010 — `/approach` (dedicated) + `/scan` (scanner) mounts |
 | readsb v3.16.10 | **Active** | ADS-B decoder on SN:00000003, `--gain 42.1` (tuned 2026-03-12, was auto), local JSON API |
 | tar1090 | **Active** | Web map at `http://100.68.206.39/tar1090/` — reads from readsb |
-| acarsdec | **Active** | ACARS decoder on SN:00000104, 4 freqs (131.550/131.450/131.475/131.725), gain 12 (tuned 2026-03-12, was 28; wideband LNA adds ~20dB), output to `/home/pi/closecall/acars_messages.jsonl` |
-| dump978-fa | **Active** | `dump978-fa.service` — UAT 978 MHz decoder on SN:00000105, JSON port 30979, raw port 30978 |
+| acarsdec | **Active** | `acarsdec.service` — ACARS decoder on RTL2838 SN:00000104 + wideband LNA, 5 NA freqs (130.025/130.425/130.450/131.550/131.725), gain 42, output to `/home/pi/closecall/acars_messages.jsonl` |
+| dump978-fa | **Disabled** | `dump978-fa.service` — UAT 978 MHz decoder, disabled 2026-03-13. V4 SN:002 now available to re-enable. |
 | rtl_test/rtl_fm/rtl_power | Installed | Blog fork versions at `/usr/local/bin/` |
 | librtlsdr (Blog fork) | Installed | Built from source at `/usr/local/lib/` — required for V4 |
 
@@ -102,6 +101,9 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 10. **Kiosk 3 AM restart seatd permission errors** — Cage sometimes fails to acquire DRM session on daily restart cron (`Could not open target tty: Permission denied`). Cage's `Restart=always` in systemd retries and typically succeeds on second attempt ~10s later.
 11. **Duplicate serial 00000001 on 5th dongle** — New V3 dongle shipped with default SN:001, colliding with existing approach V4. Used `rtl_eeprom -d <idx> -s <serial>` to program unique serials. Also renamed ACARS dongle from SN:00000004 to SN:00000104 because librtlsdr interprets small numeric serials as device indices (00000004 → index 4).
 12. **Dashboard server path confusion** — Service runs from `/home/pi/dashboard/dashboard_server.py`, NOT `/home/pi/closecall/`. Both copies exist; the closecall copy is stale. Always edit the `/home/pi/dashboard/` version.
+13. **Kiosk Cage/Chromium crash loop after power cycle (2026-03-13)** — After hard power loss, Cage can't restart because seatd holds stale VT sessions. Restarting seatd fixes Cage but kills D-Bus, causing Chromium SIGABRT (`FATAL:dbus/bus.cc:1245`). Fix: wrapper script (`/home/pi/start_kiosk.sh`) runs as root, restarts seatd before each Cage launch, and sets `DBUS_SESSION_BUS_ADDRESS=disabled:` so Chromium never connects to D-Bus (not needed for kiosk). Also uses `setsid --wait` to give Cage its own POSIX session.
+14. **ACARS V4+LNA decoded only keepalives, zero data messages (2026-03-13)** — V4 SN:002 with wideband LNA at gain 12 decoded only 7 `_d` keepalive frames in 30 minutes. Zero H1 data messages (flight plans, positions). Root cause: V4's internal triplexer/FM notch adds 2-3 dB VHF loss, and wideband LNA amplifies FM broadcast (+20 dB at 88-108 MHz) which overloads the V4's ADC before the internal FM notch can act. Fix: switched to old RTL2838UHIDIR (SN:104) + LNA + gain 42 + correct NA frequencies → 17 rich data messages in first 3 minutes. Research source: thebaldgeek.github.io, airframes.io, sigidwiki. See memory file `v4_lna_acars_troubleshooting_research.md`.
+15. **Wrong ACARS frequencies for North America (2026-03-13)** — Was monitoring 131.450 and 131.475 MHz (European/Air Canada only) with zero messages ever. Research found correct NA ACARS set: 130.025, 130.425, 130.450, 131.550, 131.725 MHz. All fit within single dongle's 2 MHz bandwidth. Fix: updated acarsdec.service ExecStart with correct frequencies.
 
 ## Lessons Learned
 
@@ -120,7 +122,10 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 - **RTL-SDR serial collision** — All Blog V4 dongles ship with SN:00000001. Always reprogram with `rtl_eeprom` before adding to multi-dongle setup. Use serials > 100 (e.g., 00000104) to avoid librtlsdr interpreting them as device indices.
 - **UAT traffic is sporadic** — GA aircraft below 18,000 ft, mainly daytime. FIS-B ground stations broadcast weather data periodically regardless of aircraft.
 - **ADS-B optimal gain: 42.1 dB** — Tuned 2026-03-12 across 9 settings (32.8–49.6). Auto gain had 3,834 strong signals (clipping); 42.1 scored highest (6,832) with 17 avg aircraft and zero clipping. Above 44.5 dB, strong signals appear.
-- **ACARS optimal gain: 12 dB (with LNA)** — Tuned 2026-03-12 across 6 settings (8–28). With wideband LNA (~20 dB), dongle gain 12 = ~32 dB total. Higher gains (24+) completely deaf from saturation. Without LNA, gain 20-28 would be appropriate.
+- **ACARS optimal gain: 42 dB on old RTL2838 with LNA** — Tuned 2026-03-13 after switching back to old dongle. The old R820T tuner handles the LNA better than V4's R828D at VHF. Without LNA, gain 28-42 recommended. V4 with LNA at gain 12 only decoded keepalive `_d` frames — zero data messages.
+- **RTL-SDR V4 is NOT suitable for VHF ACARS** — V4's internal triplexer + FM notch filter add 2-3 dB sensitivity loss on VHF vs V3/RTL2838 (per thebaldgeek: "Avoid the RTL-SDR v4 for anything above HF"). V4 advantages (HF upconverter, FM notch) don't help at 131 MHz. The FM notch is INSIDE the dongle after the ADC — it can't prevent front-end overload from an external LNA. Use V3 or old RTL2838 for VHF ACARS.
+- **Wideband LNA is dangerous near FM band** — SPF5189Z amplifies everything 50 MHz–4 GHz. FM broadcast (88-108 MHz) is only 23 MHz below ACARS (130-131 MHz). With LNA, FM gets +20 dB amplification that can overload the dongle ADC, raise noise floor, and bury ACARS signals. Works with old RTL2838 at gain 42 but NOT with V4. For guaranteed clean ACARS, use a bandpass or cavity filter, or no LNA at all.
+- **Wrong ACARS frequencies waste monitoring** — 131.450 and 131.475 MHz are European/Air Canada only. Zero messages ever received on them in DFW. Correct North America set: 130.025, 130.425, 130.450, 131.550, 131.725. Sources: airframes.io, sigidwiki, thebaldgeek.
 - **Don't assume hardware failure** — V4 #2 showed bad IQ on Pi (range 7-9) but tested perfect on main PC (range 255). Root cause was USB hub power starvation, not dead RF front end. Always test on second machine before declaring dead.
 - **ACARS activity patterns** — Busy during daytime/evening, very sparse 2-5 AM. All 4 monitored ACARS freqs most active on 131.725 MHz in DFW area.
 
@@ -143,9 +148,18 @@ D3000 Discone Antenna (25-1300 MHz, mounted outside)
 ### UAT
 - 978 MHz — US only, GA aircraft below 18,000 ft, also carries FIS-B weather data
 
-### ACARS (VHF Data Link)
-- Primary: 131.550 MHz
-- Secondary: 131.450 MHz, 131.475 MHz, 131.725 MHz
+### ACARS (VHF Data Link) — North America Frequencies
+- **130.025 MHz** — USA & Canada secondary (ARINC)
+- **130.425 MHz** — USA additional
+- **130.450 MHz** — USA & Canada additional (active in DFW per RadioReference)
+- **131.550 MHz** — Primary worldwide (SITA/ARINC)
+- **131.725 MHz** — Listed as Europe but confirmed active in DFW area
+
+**NOT used (wrong region):** 131.450 (not standard NA), 131.475 (Air Canada company only), 131.825 (Europe only)
+
+**Bandwidth note:** 130.025–131.725 = 1.7 MHz — fits within RTL-SDR's 2 MHz bandwidth on a single dongle.
+
+**Sources:** airframes.io, sigidwiki.com, thebaldgeek.github.io, RadioReference DFW
 
 ### VHF Airband — Active Monitoring (20 Frequencies)
 Configured in `/usr/local/etc/rtl_airband.conf` on Pi, scan mode.
@@ -267,11 +281,11 @@ ssh pi@100.68.206.39 "cat /sys/bus/usb/devices/*/serial 2>/dev/null | sort -u"
 # Check ACARS message log
 ssh pi@100.68.206.39 "tail -5 /home/pi/closecall/acars_messages.jsonl"
 
-# Check all 6 services
-ssh pi@100.68.206.39 "systemctl is-active readsb rtl-airband-approach rtl-airband-scan airband-dashboard kiosk dump978-fa"
+# Check active services (acarsdec replaces dump978-fa as of 2026-03-13)
+ssh pi@100.68.206.39 "systemctl is-active readsb rtl-airband-approach rtl-airband-scan airband-dashboard kiosk acarsdec"
 
-# Check UAT messages
-ssh pi@100.68.206.39 "timeout 10 nc -q1 localhost 30979 | head -5"
+# Check acarsdec service status
+ssh pi@100.68.206.39 "systemctl status acarsdec"
 ```
 
 ## References
