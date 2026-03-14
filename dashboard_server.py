@@ -453,112 +453,14 @@ def get_acars_messages():
     return messages
 
 
-def _parse_acars_positions(text):
-    """Extract lat/lon position reports from ACARS text.
-
-    Handles multiple formats:
-    1. /A1 005441, 31.8107,- 97.9854,268,123.2,426,...
-    2. POSN32478W096547 (compact lat/lon: N32.478 W096.547)
-    Returns list of {lat, lon, alt, heading} dicts.
-    """
-    import re
-    positions = []
-
-    # Format 1: /A entries with decimal lat/lon
-    for match in re.finditer(
-        r'/A(\d)\s+(\d{6}),\s*([-\d.]+),\s*([-\d.]+),\s*(\d+),\s*([\d.]+),\s*(\d+)',
-        text
-    ):
-        seq, time_raw, lat, lon, heading, _, alt = match.groups()
-        try:
-            positions.append({
-                'seq': int(seq),
-                'lat': float(lat),
-                'lon': float(lon),
-                'alt': int(alt) * 100,
-                'heading': int(heading),
-            })
-        except (ValueError, TypeError):
-            continue
-
-    # Format 2: POSN/S + 5 digits + E/W + 6 digits (compact position)
-    pos_match = re.search(r'POS([NS])(\d{5})([EW])(\d{6})', text)
-    if pos_match:
-        ns, lat_raw, ew, lon_raw = pos_match.groups()
-        try:
-            lat = float(lat_raw[:2]) + float(lat_raw[2:]) / 1000
-            lon = float(lon_raw[:3]) + float(lon_raw[3:]) / 1000
-            if ns == 'S':
-                lat = -lat
-            if ew == 'W':
-                lon = -lon
-            positions.append({
-                'lat': round(lat, 4),
-                'lon': round(lon, 4),
-            })
-        except (ValueError, TypeError):
-            pass
-
-    return positions
-
-
-def _parse_acars_flight_plan(text):
-    """Extract flight plan info from ACARS FPN messages.
-
-    Handles: FPN/FNAAL2115/RP:DA:KMIA:AA:KDFW:CR:...
-    Returns dict with origin, destination, runway, approach or None.
-    """
-    import re
-    result = {}
-
-    # FPN format: DA:KXXX = departure, AA:KXXX = arrival
-    da = re.search(r'DA:([A-Z]{4})', text)
-    aa = re.search(r'AA:([A-Z]{4})', text)
-    rwy = re.search(r'R:(\d{2}[LCR]?)', text)
-
-    if da:
-        result['origin'] = da.group(1)
-    if aa:
-        result['destination'] = aa.group(1)
-    if rwy:
-        result['runway'] = rwy.group(1)
-
-    # Also check for encoded routes: KIAHKSLC etc (4-char ICAO pairs)
-    if not da and not aa:
-        route_match = re.search(r'(K[A-Z]{3})(K[A-Z]{3})', text)
-        if route_match:
-            result['origin'] = route_match.group(1)
-            result['destination'] = route_match.group(2)
-
-    # Waypoints from REQ/PWI routes: HRPER.HULZE.MIERA...
-    wpts = re.search(r'[:/]([A-Z]{3,5}(?:\.[A-Z]{3,5}){2,})', text)
-    if wpts:
-        result['waypoints'] = wpts.group(1).split('.')
-
-    return result if result else None
-
-
-def _parse_acars_weather(text):
-    """Extract wind/weather data from ACARS messages.
-
-    Handles PWI (Periodic Wind Information) and weather reports.
-    """
-    import re
-    result = {}
-
-    # Wind at altitude: WQ followed by flight levels
-    wq = re.search(r'WQ([\d.]+(?:\.[\d.]+)*)', text)
-    if wq:
-        result['wind_altitudes'] = wq.group(1)
-
-    return result if result else None
-
-
 def get_acars_parsed(limit=50):
     """Read and parse ACARS messages into structured data for Spacenodes.
 
-    Returns list of parsed messages with extracted positions, routes, etc.
+    Uses acars_parser module for comprehensive message parsing across all
+    ACARS label types (positions, OOOI, weather, engine, maintenance, etc).
     """
+    from acars_parser import parse_acars_message
+
     messages = []
     try:
         if not ACARS_LOG.exists():
@@ -571,7 +473,6 @@ def get_acars_parsed(limit=50):
                 text = (msg.get("text") or "").strip()
                 label = msg.get("label", "")
 
-                # Skip keepalives
                 if not text and label == "_d":
                     continue
 
@@ -582,7 +483,9 @@ def get_acars_parsed(limit=50):
                 else:
                     ts_iso = str(ts)
 
-                parsed = {
+                parsed_data = parse_acars_message(msg)
+
+                result = {
                     "timestamp": ts_iso,
                     "flight": (msg.get("flight") or "").strip(),
                     "tail": (msg.get("tail") or "").strip(),
@@ -591,22 +494,11 @@ def get_acars_parsed(limit=50):
                     "freq": msg.get("freq", ""),
                     "level": msg.get("level"),
                     "error": msg.get("error", 0),
+                    "category": parsed_data["category"],
+                    "parsed": parsed_data["parsed"],
                 }
 
-                # Extract structured data
-                positions = _parse_acars_positions(text)
-                if positions:
-                    parsed["positions"] = positions
-
-                flight_plan = _parse_acars_flight_plan(text)
-                if flight_plan:
-                    parsed["flight_plan"] = flight_plan
-
-                weather = _parse_acars_weather(text)
-                if weather:
-                    parsed["weather"] = weather
-
-                messages.append(parsed)
+                messages.append(result)
             except (json.JSONDecodeError, ValueError):
                 continue
         messages.reverse()
