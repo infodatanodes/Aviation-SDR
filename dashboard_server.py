@@ -407,7 +407,7 @@ def get_adsb_aircraft():
         aircraft.sort(key=lambda x: (x["distance"] if x["distance"] is not None else 999))
         return {
             "count": len(data.get("aircraft", [])),
-            "aircraft": aircraft[:12],
+            "aircraft": aircraft[:25],
         }
     except (OSError, json.JSONDecodeError):
         return {"count": 0, "aircraft": []}
@@ -730,9 +730,9 @@ def build_stats_response():
         scanner_channels.append(build_channel_entry(
             mhz, name, all_stats, active_channels, sparkline_data, last_active_data, channel_history))
 
-    # ADS-B + ACARS
+    # ADS-B + ACARS (parsed with category/decoded data)
     adsb = get_adsb_aircraft()
-    acars = get_acars_messages()
+    acars = get_acars_parsed(limit=30)
 
     # Emergency squawk check (runs on raw aircraft.json data)
     try:

@@ -96,11 +96,10 @@ html, body {
     100% { background: linear-gradient(135deg, #ff4444 0%, #ff0000 100%); }
 }
 
-/* -- MAIN GRID (3x2) -- */
+/* -- MAIN GRID (2 columns) -- */
 #main-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
+    grid-template-columns: 1fr 1fr;
     gap: 8px;
     padding: 8px 12px;
     flex: 1;
@@ -122,15 +121,15 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 12px;
+    padding: 8px 14px;
     background: #0d0d1a;
     border-left: 4px solid #2a2a4e;
-    min-height: 36px;
+    min-height: 42px;
     flex-shrink: 0;
 }
 
 .panel-hdr .title {
-    font-size: 14px;
+    font-size: 16px;
     font-weight: 700;
     color: #ffffff;
     letter-spacing: 1px;
@@ -139,17 +138,17 @@ html, body {
 .panel-hdr .freq-label {
     font-size: 12px;
     color: #888;
-    margin-top: 1px;
+    margin-top: 2px;
 }
 
 .panel-hdr .badge {
     display: inline-flex;
     align-items: center;
     gap: 5px;
-    font-size: 11px;
+    font-size: 12px;
     font-weight: 700;
     letter-spacing: 1px;
-    padding: 2px 8px;
+    padding: 3px 10px;
     border-radius: 4px;
     background: rgba(50, 50, 50, 0.6);
     color: #666;
@@ -164,8 +163,8 @@ html, body {
 }
 
 .panel-hdr .badge .dot {
-    width: 6px;
-    height: 6px;
+    width: 7px;
+    height: 7px;
     border-radius: 50%;
     background: #444;
 }
@@ -177,125 +176,41 @@ html, body {
 
 .panel-body {
     flex: 1;
-    padding: 6px 10px;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 4px;
     overflow: hidden;
     min-height: 0;
-}
-
-/* -- FREQ PANEL SPARKLINE -- */
-.freq-sparkline {
-    display: flex;
-    align-items: flex-end;
-    gap: 1px;
-    height: 28px;
-    padding: 2px 0;
-    flex-shrink: 0;
-}
-
-.spark-bar {
-    flex: 1;
-    min-width: 0;
-    border-radius: 1px 1px 0 0;
-    min-height: 1px;
-}
-
-/* -- FREQ PANEL STATS ROW -- */
-.freq-stats {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    font-size: 11px;
-    color: #888;
-    padding: 2px 0;
-    flex-shrink: 0;
-    border-bottom: 1px solid #1a1a2e;
-}
-
-.freq-stats .total {
-    color: #ccc;
-    font-weight: 700;
-}
-
-.freq-stats .last-heard {
-    color: #aaa;
-}
-
-.freq-stats .last-heard.stale {
-    color: #555;
-}
-
-/* -- FREQ PANEL TX HISTORY -- */
-.tx-history {
-    flex: 1;
-    overflow: hidden;
-    display: flex;
-    flex-direction: column;
-    gap: 0;
-    min-height: 0;
-}
-
-.tx-history-hdr {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 8px;
-    padding: 4px 8px;
-    font-size: 9px;
-    font-weight: 700;
-    color: #555;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    border-bottom: 1px solid #2a2a4e;
-    flex-shrink: 0;
-}
-
-.tx-entry {
-    display: grid;
-    grid-template-columns: 80px 1fr;
-    gap: 8px;
-    padding: 3px 8px;
-    font-size: 13px;
-    border-bottom: 1px solid rgba(42, 42, 78, 0.3);
-}
-
-.tx-entry.new-entry {
-    animation: flash 1.5s ease-out;
-}
-
-.tx-entry .time { color: #aaa; }
-.tx-entry .dur { color: #ccc; text-align: right; }
-
-.tx-empty {
-    padding: 12px 8px;
-    color: #555;
-    font-size: 12px;
-    text-align: center;
 }
 
 /* -- ADS-B TABLE -- */
 .adsb-hdr {
     display: grid;
-    grid-template-columns: 100px 70px 65px 65px 55px 55px;
+    grid-template-columns: 120px 80px 75px 75px 65px 65px;
     gap: 6px;
-    padding: 6px 10px;
+    padding: 8px 14px;
     background: #0d0d1a;
     color: #555;
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
-    font-size: 10px;
+    font-size: 11px;
     border-bottom: 1px solid #2a2a4e;
     flex-shrink: 0;
 }
 
+.adsb-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+}
+
 .adsb-row {
     display: grid;
-    grid-template-columns: 100px 70px 65px 65px 55px 55px;
+    grid-template-columns: 120px 80px 75px 75px 65px 65px;
     gap: 6px;
-    padding: 4px 10px;
-    font-size: 13px;
+    padding: 5px 14px;
+    font-size: 14px;
     border-bottom: 1px solid rgba(42, 42, 78, 0.3);
     align-items: center;
 }
@@ -307,51 +222,87 @@ html, body {
 .adsb-spd { color: #aaa; }
 .adsb-dist { color: #ccc; }
 .adsb-rssi { color: #888; }
-.adsb-sqk { color: #888; font-size: 10px; }
+.adsb-sqk { color: #888; font-size: 11px; }
 .adsb-sqk.emergency { color: #ff3333; font-weight: 700; }
 
-.adsb-empty {
-    padding: 12px 8px;
+.adsb-empty, .acars-empty {
+    padding: 20px 14px;
     color: #555;
-    font-size: 12px;
+    font-size: 13px;
     text-align: center;
 }
 
 /* -- ACARS MESSAGES -- */
-.acars-hdr {
-    display: grid;
-    grid-template-columns: 70px 80px 70px 1fr;
-    gap: 6px;
-    padding: 6px 10px;
-    background: #0d0d1a;
-    color: #555;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    font-size: 10px;
-    border-bottom: 1px solid #2a2a4e;
-    flex-shrink: 0;
+.acars-scroll {
+    flex: 1;
+    overflow-y: auto;
+    min-height: 0;
+    padding: 4px 0;
 }
 
-.acars-row {
-    display: grid;
-    grid-template-columns: 70px 80px 70px 1fr;
-    gap: 6px;
-    padding: 4px 10px;
-    font-size: 13px;
+.acars-msg {
+    padding: 6px 14px;
     border-bottom: 1px solid rgba(42, 42, 78, 0.3);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
 
-.acars-time { color: #aaa; }
-.acars-flight { color: #f59e0b; font-weight: 700; }
-.acars-tail { color: #888; }
-.acars-text { color: #ccc; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.acars-msg.new-entry {
+    animation: flash 1.5s ease-out;
+}
 
-.acars-empty {
-    padding: 12px 8px;
-    color: #555;
+.acars-msg-top {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 13px;
+}
+
+.acars-time { color: #777; font-size: 12px; }
+.acars-flight { color: #f59e0b; font-weight: 700; }
+.acars-tail { color: #888; font-size: 12px; }
+
+.acars-cat {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+}
+
+.cat-position { background: rgba(34, 211, 238, 0.2); color: #22d3ee; }
+.cat-oooi { background: rgba(0, 255, 136, 0.2); color: #00ff88; }
+.cat-weather { background: rgba(99, 102, 241, 0.2); color: #818cf8; }
+.cat-engine { background: rgba(239, 68, 68, 0.2); color: #f87171; }
+.cat-flight_plan { background: rgba(168, 85, 247, 0.2); color: #c084fc; }
+.cat-maintenance { background: rgba(239, 68, 68, 0.25); color: #ff6b6b; }
+.cat-free_text { background: rgba(251, 191, 36, 0.2); color: #fbbf24; }
+.cat-ops { background: rgba(100, 100, 100, 0.2); color: #aaa; }
+.cat-keepalive { background: rgba(50, 50, 50, 0.2); color: #666; }
+.cat-binary { background: rgba(50, 50, 50, 0.2); color: #666; }
+.cat-unknown { background: rgba(50, 50, 50, 0.2); color: #888; }
+
+.acars-decoded {
     font-size: 12px;
-    text-align: center;
+    color: #bbb;
+    padding-left: 2px;
+    line-height: 1.4;
+}
+
+.acars-decoded .key { color: #666; }
+.acars-decoded .val { color: #ccc; }
+.acars-decoded .val-highlight { color: #22d3ee; font-weight: 600; }
+
+.acars-raw {
+    font-size: 11px;
+    color: #555;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    padding-left: 2px;
 }
 </style>
 </head>
@@ -370,16 +321,14 @@ html, body {
 <!-- EMERGENCY BANNER -->
 <div id="emergency-banner"></div>
 
-<!-- MAIN GRID: 3x2 -->
+<!-- MAIN GRID: 2 columns -->
 <div id="main-grid">
-    <!-- Row 1: DFW Approach | ADS-B | ACARS -->
-    <div class="panel" id="panel-freq-0"></div>
-
+    <!-- ADS-B TRACKER -->
     <div class="panel" id="panel-adsb">
         <div class="panel-hdr" style="border-left-color: #22d3ee;">
             <div>
                 <div class="title">ADS-B TRACKER</div>
-                <div class="freq-label">SN:00000003 &bull; 1090 MHz</div>
+                <div class="freq-label">SN:00000003 &bull; 1090 MHz &bull; D3000 Discone</div>
             </div>
             <div class="badge" id="adsb-badge">
                 <span class="dot"></span>
@@ -394,145 +343,33 @@ html, body {
             <span>RSSI</span>
             <span>Squawk</span>
         </div>
-        <div class="panel-body" id="adsb-list" style="padding: 0; gap: 0;"></div>
+        <div class="panel-body">
+            <div class="adsb-scroll" id="adsb-list"></div>
+        </div>
     </div>
 
+    <!-- ACARS DECODER -->
     <div class="panel" id="panel-acars">
         <div class="panel-hdr" style="border-left-color: #f59e0b;">
             <div>
                 <div class="title">ACARS DECODER</div>
-                <div class="freq-label">SN:00000004 &bull; 131.550 MHz</div>
+                <div class="freq-label">SN:00000104 &bull; 5 NA Freqs &bull; Wideband LNA</div>
             </div>
             <div class="badge" id="acars-badge"><span class="dot"></span>LISTENING</div>
         </div>
-        <div class="acars-hdr">
-            <span>Time</span>
-            <span>Flight</span>
-            <span>Reg</span>
-            <span>Message</span>
+        <div class="panel-body">
+            <div class="acars-scroll" id="acars-list"></div>
         </div>
-        <div class="panel-body" id="acars-list" style="padding: 0; gap: 0;"></div>
     </div>
-
-    <!-- Row 2: Regional Approach | DFW Departure | DFW Clearance -->
-    <div class="panel" id="panel-freq-1"></div>
-    <div class="panel" id="panel-freq-2"></div>
-    <div class="panel" id="panel-freq-3"></div>
 </div>
 
 <script>
-const CHANNEL_COLORS = {
-    'DFW Approach': '#00bfff',
-    'Regional Approach': '#a855f7',
-    'DFW Departure': '#00ff88',
-    'DFW Clearance': '#ff6b35'
-};
-
-const DEFAULT_COLOR = '#00bfff';
 const EMERGENCY_SQUAWKS = new Set(['7500', '7600', '7700']);
-
-// Track previous state for new-entry detection
-let prevTxCounts = {};
-let prevSquelch = {};
 let initialized = false;
-
-function getColor(name) {
-    return CHANNEL_COLORS[name] || DEFAULT_COLOR;
-}
+let prevAcarsCount = 0;
 
 function fmtNum(n) {
     return n != null ? n.toLocaleString() : '--';
-}
-
-function formatLastActive(secs) {
-    if (secs == null) return 'No activity';
-    if (secs < 5) return 'Just now';
-    if (secs < 60) return `${secs}s ago`;
-    if (secs < 3600) return `${Math.floor(secs / 60)}m ago`;
-    return `${Math.floor(secs / 3600)}h ago`;
-}
-
-// -- BUILD FREQUENCY PANEL --
-function buildFreqPanel(ch, panelId) {
-    const panel = document.getElementById(panelId);
-    if (!panel) return;
-
-    const color = getColor(ch.name);
-    const prevCount = prevSquelch[ch.name];
-    const squelchDelta = (prevCount != null && ch.squelch_opens > prevCount);
-    const isActive = ch.active === true || squelchDelta;
-    const statusText = isActive ? 'LIVE' : 'IDLE';
-
-    // Header
-    const dotStyle = isActive
-        ? `background:${color}; box-shadow: 0 0 6px ${color};`
-        : 'background:#444;';
-    const badgeClass = isActive ? 'badge active' : 'badge';
-
-    // Sparkline
-    const sparkline = ch.sparkline || [];
-    const maxSpark = Math.max(1, ...sparkline);
-    let sparkHtml = '';
-    for (let i = 0; i < sparkline.length; i++) {
-        const val = sparkline[i];
-        const h = val > 0 ? Math.max(3, Math.round((val / maxSpark) * 24)) : 1;
-        const barColor = val > 0 ? color : '#2a2a4e';
-        const opacity = val > 0 ? 0.9 : 0.15;
-        sparkHtml += `<div class="spark-bar" style="height:${h}px;background:${barColor};opacity:${opacity};"></div>`;
-    }
-
-    // Last heard
-    const lastText = formatLastActive(ch.last_active_secs);
-    const staleClass = (ch.last_active_secs == null || ch.last_active_secs > 300) ? 'last-heard stale' : 'last-heard';
-
-    // History
-    const history = ch.history || [];
-    const prevTxCount = prevTxCounts[ch.name] || 0;
-    let historyHtml = '';
-    if (history.length === 0) {
-        historyHtml = '<div class="tx-empty">No transmissions yet</div>';
-    } else {
-        historyHtml = `<div class="tx-history-hdr"><span>Time</span><span style="text-align:right">Duration</span></div>`;
-        history.forEach((tx, i) => {
-            const isNew = initialized && i === 0 && history.length > prevTxCount;
-            const cls = isNew ? 'tx-entry new-entry' : 'tx-entry';
-            historyHtml += `<div class="${cls}">
-                <span class="time">${tx.timestamp}</span>
-                <span class="dur">${tx.duration}s</span>
-            </div>`;
-        });
-    }
-
-    panel.innerHTML = `
-        <div class="panel-hdr" style="border-left-color: ${color};">
-            <div>
-                <div class="title">${ch.name.toUpperCase()}</div>
-                <div class="freq-label">${ch.freq} MHz</div>
-            </div>
-            <div class="${badgeClass}">
-                <span class="dot" style="${dotStyle}"></span>${statusText}
-            </div>
-        </div>
-        <div class="panel-body">
-            <div class="freq-sparkline">${sparkHtml}</div>
-            <div class="freq-stats">
-                <span>Total: <span class="total">${ch.squelch_opens.toLocaleString()}</span></span>
-                <span class="${staleClass}">Last: ${lastText}</span>
-            </div>
-            <div class="tx-history">${historyHtml}</div>
-        </div>`;
-
-    prevSquelch[ch.name] = ch.squelch_opens;
-    prevTxCounts[ch.name] = history.length;
-}
-
-// -- UPDATE CHANNELS --
-function updateChannels(channels) {
-    if (!channels) return;
-    // Map channels to panels: index 0=DFW Approach, 1=Regional, 2=Departure, 3=Clearance
-    channels.forEach((ch, i) => {
-        buildFreqPanel(ch, `panel-freq-${i}`);
-    });
 }
 
 // -- ADS-B --
@@ -576,15 +413,107 @@ function updateAdsb(adsb) {
     list.innerHTML = html;
 }
 
+// -- ACARS decoded summary --
+function formatDecoded(category, parsed) {
+    if (!parsed || Object.keys(parsed).length === 0) return '';
+
+    const parts = [];
+
+    switch (category) {
+        case 'position': {
+            if (parsed.lat != null && parsed.lon != null) {
+                parts.push(`<span class="val-highlight">${parsed.lat.toFixed(3)}N, ${Math.abs(parsed.lon).toFixed(3)}W</span>`);
+            }
+            if (parsed.alt) parts.push(`<span class="key">ALT</span> <span class="val">${fmtNum(parsed.alt)} ft</span>`);
+            if (parsed.heading) parts.push(`<span class="key">HDG</span> <span class="val">${parsed.heading}</span>`);
+            if (parsed.groundspeed) parts.push(`<span class="key">GS</span> <span class="val">${parsed.groundspeed} kt</span>`);
+            if (parsed.waypoint) parts.push(`<span class="key">WPT</span> <span class="val">${parsed.waypoint}</span>`);
+            if (parsed.next_waypoint) parts.push(`<span class="key">NEXT</span> <span class="val">${parsed.next_waypoint}</span>`);
+            if (parsed.destination) parts.push(`<span class="key">DEST</span> <span class="val">${parsed.destination}</span>`);
+            if (parsed.fuel) parts.push(`<span class="key">FUEL</span> <span class="val">${fmtNum(parsed.fuel)} lb</span>`);
+            break;
+        }
+        case 'oooi': {
+            const events = {out: 'GATE OUT', off: 'WHEELS OFF', on: 'WHEELS ON', in: 'GATE IN', toic: 'TOIC'};
+            if (parsed.event) parts.push(`<span class="val-highlight">${events[parsed.event] || parsed.event}</span>`);
+            if (parsed.depa) parts.push(`<span class="key">FROM</span> <span class="val">${parsed.depa}</span>`);
+            if (parsed.dsta) parts.push(`<span class="key">TO</span> <span class="val">${parsed.dsta}</span>`);
+            if (parsed.gtout) parts.push(`<span class="key">OUT</span> <span class="val">${parsed.gtout}</span>`);
+            if (parsed.wloff) parts.push(`<span class="key">OFF</span> <span class="val">${parsed.wloff}</span>`);
+            if (parsed.wlon) parts.push(`<span class="key">ON</span> <span class="val">${parsed.wlon}</span>`);
+            if (parsed.gtin) parts.push(`<span class="key">IN</span> <span class="val">${parsed.gtin}</span>`);
+            if (parsed.eta) parts.push(`<span class="key">ETA</span> <span class="val">${parsed.eta}</span>`);
+            break;
+        }
+        case 'weather': {
+            parts.push('<span class="val-highlight">WINDS ALOFT</span>');
+            if (parsed.origin) parts.push(`<span class="key">FROM</span> <span class="val">${parsed.origin}</span>`);
+            if (parsed.destination) parts.push(`<span class="key">TO</span> <span class="val">${parsed.destination}</span>`);
+            if (parsed.observations && parsed.observations.length > 0) {
+                const obs = parsed.observations[0];
+                parts.push(`<span class="key">WIND</span> <span class="val">${obs.wind_dir}/${obs.wind_speed}kt</span>`);
+                parts.push(`<span class="key">TEMP</span> <span class="val">${obs.temp_c}C</span>`);
+                parts.push(`<span class="key">FL</span> <span class="val">${Math.round(obs.alt / 100)}</span>`);
+            }
+            break;
+        }
+        case 'engine': {
+            const etype = parsed.type === 'dfb' ? 'DFB REPORT' : parsed.type === 'performance' ? 'PERF DATA' : 'ENGINE';
+            parts.push(`<span class="val-highlight">${etype}</span>`);
+            if (parsed.aircraft_type) parts.push(`<span class="key">TYPE</span> <span class="val">${parsed.aircraft_type}</span>`);
+            if (parsed.origin) parts.push(`<span class="key">FROM</span> <span class="val">${parsed.origin}</span>`);
+            if (parsed.destination) parts.push(`<span class="key">TO</span> <span class="val">${parsed.destination}</span>`);
+            break;
+        }
+        case 'flight_plan': {
+            parts.push('<span class="val-highlight">FLIGHT PLAN</span>');
+            if (parsed.origin) parts.push(`<span class="key">FROM</span> <span class="val">${parsed.origin}</span>`);
+            if (parsed.destination) parts.push(`<span class="key">TO</span> <span class="val">${parsed.destination}</span>`);
+            if (parsed.flight_number) parts.push(`<span class="key">FN</span> <span class="val">${parsed.flight_number}</span>`);
+            if (parsed.waypoints && Array.isArray(parsed.waypoints)) {
+                parts.push(`<span class="key">RTE</span> <span class="val">${parsed.waypoints.slice(0, 6).join('.')}</span>`);
+            }
+            break;
+        }
+        case 'maintenance': {
+            parts.push('<span class="val-highlight">MAINT ALERT</span>');
+            if (parsed.ata_code) parts.push(`<span class="key">ATA</span> <span class="val">${parsed.ata_code}</span>`);
+            if (parsed.system) parts.push(`<span class="val">${parsed.system}</span>`);
+            if (parsed.component) parts.push(`<span class="val">${parsed.component}</span>`);
+            break;
+        }
+        case 'free_text': {
+            if (parsed.origin) parts.push(`<span class="key">FROM</span> <span class="val">${parsed.origin}</span>`);
+            if (parsed.destination) parts.push(`<span class="key">TO</span> <span class="val">${parsed.destination}</span>`);
+            if (parsed.message) parts.push(`<span class="val">${escapeHtml(parsed.message.substring(0, 120))}</span>`);
+            break;
+        }
+        case 'ops': {
+            if (parsed.station) parts.push(`<span class="key">STN</span> <span class="val">${parsed.station}</span>`);
+            if (parsed.eta) parts.push(`<span class="key">ETA</span> <span class="val">${parsed.eta}</span>`);
+            break;
+        }
+    }
+
+    return parts.join(' &nbsp; ');
+}
+
+function escapeHtml(str) {
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
 // -- ACARS --
 function updateAcars(acars) {
     const list = document.getElementById('acars-list');
     const badge = document.getElementById('acars-badge');
 
     if (!acars || acars.length === 0) {
-        list.innerHTML = '<div class="acars-empty">No messages decoded yet &mdash; listening on 4 frequencies</div>';
+        list.innerHTML = '<div class="acars-empty">No messages decoded yet &mdash; listening on 5 NA frequencies</div>';
         badge.className = 'badge';
         badge.innerHTML = '<span class="dot"></span>LISTENING';
+        prevAcarsCount = 0;
         return;
     }
 
@@ -592,15 +521,45 @@ function updateAcars(acars) {
     badge.innerHTML = `<span class="dot" style="background:#f59e0b; box-shadow: 0 0 6px #f59e0b;"></span>${acars.length} MSG`;
 
     let html = '';
-    for (const m of acars) {
-        html += `<div class="acars-row">
-            <span class="acars-time">${m.timestamp}</span>
-            <span class="acars-flight">${m.flight || '--'}</span>
-            <span class="acars-tail">${m.tail || '--'}</span>
-            <span class="acars-text">${m.text || m.label || '--'}</span>
-        </div>`;
+    for (let i = 0; i < acars.length; i++) {
+        const m = acars[i];
+        const isNew = initialized && i === 0 && acars.length > prevAcarsCount;
+        const cls = isNew ? 'acars-msg new-entry' : 'acars-msg';
+        const cat = m.category || 'unknown';
+        const catClass = 'cat-' + cat;
+        const catLabel = cat.replace('_', ' ');
+
+        const decoded = formatDecoded(cat, m.parsed);
+        const rawText = m.text ? escapeHtml(m.text.substring(0, 150)) : '';
+
+        // Format timestamp
+        let timeStr = m.timestamp || '';
+        if (timeStr.includes('T')) {
+            // ISO format — extract time portion
+            const parts = timeStr.split('T');
+            if (parts[1]) timeStr = parts[1].substring(0, 8);
+        }
+
+        html += `<div class="${cls}">
+            <div class="acars-msg-top">
+                <span class="acars-time">${timeStr}</span>
+                <span class="acars-flight">${m.flight || '--'}</span>
+                <span class="acars-tail">${m.tail || ''}</span>
+                <span class="acars-cat ${catClass}">${catLabel}</span>
+            </div>`;
+
+        if (decoded) {
+            html += `<div class="acars-decoded">${decoded}</div>`;
+        }
+
+        if (rawText && cat !== 'keepalive' && cat !== 'binary') {
+            html += `<div class="acars-raw">${rawText}</div>`;
+        }
+
+        html += `</div>`;
     }
     list.innerHTML = html;
+    prevAcarsCount = acars.length;
 }
 
 // -- EMERGENCIES --
@@ -631,8 +590,8 @@ function updateEmergencies(emergencies) {
 // -- SELF-HEALING WATCHDOG --
 let failCount = 0;
 let lastSuccessTime = Date.now();
-const MAX_FAILURES = 30;          // 30 consecutive failures (~60s at 2s interval)
-const MAX_STALE_MS = 5 * 60000;   // 5 minutes with no successful update
+const MAX_FAILURES = 30;
+const MAX_STALE_MS = 5 * 60000;
 
 function checkWatchdog() {
     const staleDuration = Date.now() - lastSuccessTime;
@@ -657,7 +616,6 @@ async function fetchStats() {
         document.getElementById('clock').textContent = data.clock || '--:--:--';
         document.getElementById('uptime').textContent = data.uptime ? `UP ${data.uptime}` : '--';
 
-        updateChannels(data.channels);
         updateAdsb(data.adsb);
         updateAcars(data.acars);
         updateEmergencies(data.emergencies);
