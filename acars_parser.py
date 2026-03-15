@@ -715,34 +715,8 @@ def _parse_weather(label, text):
 
 def _parse_maintenance(label, text):
     """Parse maintenance/fault messages."""
-    # ATA fault codes
-    if "FAILED" in text or "FAULT" in text or "Equation ID" in text:
-        result = {"type": "fault"}
-
-        # ATA code
-        ata = re.search(r'ATA(\d{2}-\d{2})', text)
-        if ata:
-            result["ata_code"] = ata.group(1)
-
-        # System name
-        sys_m = re.search(r'ATA\d{2}-\d{2}\s+(.+?)(?:\r?\n|$)', text)
-        if sys_m:
-            result["system"] = sys_m.group(1).strip()
-
-        # Component
-        comp = re.search(r'(?:FAILED|FAULT)[/\s]*(\w+)', text)
-        if comp:
-            result["component"] = comp.group(1)
-
-        # Equation ID
-        eq = re.search(r'Equation ID:\s*(\S+)', text)
-        if eq:
-            result["equation_id"] = eq.group(1)
-
-        result["text"] = text.replace("\r\n", " ").strip()[:200]
-        return result
-
-    # #CFB prefix (common fault block)
+    # #CFB prefix (common fault block) — check FIRST before generic FAULT detection
+    # CFB messages contain structured fault data that needs special parsing
     if text.startswith("#CFB") or "#CFB" in text:
         result = {"type": "fault"}
         ata = re.search(r'ATA(\d{2}-\d{2})', text)
@@ -758,15 +732,17 @@ def _parse_maintenance(label, text):
         if msg_desc:
             result["system"] = msg_desc.group(1).strip()
         else:
-            # Single-line CFB: extract CHECK/FAIL/WARN description
-            cfb_desc = re.search(r'(CHECK\s+.+?|FAIL\w*\s+.+?|FAULT\s+.+?|WARN\s+.+?|ALERT\s+.+?|INOP\s+.+?)(?:/ID|$)', text)
-            if cfb_desc:
-                result["system"] = cfb_desc.group(1).strip()
+            # Single-line CFB: extract text after long numeric code block
+            # e.g. #CFBWRN/WN26031512490028000006FUEL CTR R XFR FAULT
+            # e.g. #CFBFLR/FR...CHECK FDU APU LOOP AWARN CKT/IDFDU APU
+            after_digits = re.search(r'\d{6,}([A-Z][A-Z\s&/()\-]+?)(?:/ID|$)', text)
+            if after_digits:
+                result["system"] = after_digits.group(1).strip()
             else:
-                # Fallback: extract after the date/code block
-                desc = re.search(r'\d{10,}([A-Z][A-Z\s&/()]+)', text)
-                if desc:
-                    result["system"] = desc.group(1).strip()
+                # Try extracting CHECK/FAIL/WARN description with context
+                cfb_desc = re.search(r'((?:CHECK|FAIL\w*|FAULT|WARN|ALERT|INOP)\s*.+?)(?:/ID|$)', text)
+                if cfb_desc:
+                    result["system"] = cfb_desc.group(1).strip()
 
         # Extract route from CFB if present (KDFW/KCLT)
         route = re.search(r'(K[A-Z]{3,4})/(K[A-Z]{3,4})', text)
@@ -778,6 +754,28 @@ def _parse_maintenance(label, text):
         comp_id = re.search(r'/ID([A-Z0-9\s]+)', text)
         if comp_id:
             result["component"] = comp_id.group(1).strip()
+
+        result["text"] = text.replace("\r\n", " ").strip()[:200]
+        return result
+
+    # Generic FAULT/FAILED messages (non-CFB)
+    if "FAILED" in text or "FAULT" in text or "Equation ID" in text:
+        result = {"type": "fault"}
+
+        # ATA code
+        ata = re.search(r'ATA(\d{2}-\d{2})', text)
+        if ata:
+            result["ata_code"] = ata.group(1)
+
+        # System name
+        sys_m = re.search(r'ATA\d{2}-\d{2}\s+(.+?)(?:\r?\n|$)', text)
+        if sys_m:
+            result["system"] = sys_m.group(1).strip()
+
+        # Equation ID
+        eq = re.search(r'Equation ID:\s*(\S+)', text)
+        if eq:
+            result["equation_id"] = eq.group(1)
 
         result["text"] = text.replace("\r\n", " ").strip()[:200]
         return result
