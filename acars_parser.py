@@ -744,10 +744,42 @@ def _parse_maintenance(label, text):
 
     # #CFB prefix (common fault block)
     if text.startswith("#CFB") or "#CFB" in text:
-        result = {"type": "fault", "text": text.replace("\r\n", " ").strip()[:200]}
+        result = {"type": "fault"}
         ata = re.search(r'ATA(\d{2}-\d{2})', text)
         if ata:
             result["ata_code"] = ata.group(1)
+
+        # Parse CFB fault message formats:
+        # #CFBFLR/FR...CHECK FDU APU LOOP AWARN CKT/IDFDU APU
+        # #CFBRTE...MSG...TO M DB AIR SUPPLY & CABIN PRESSURE CONTROLLER (R) EOR
+
+        # Look for MSG line in multi-line CFB (contains the actual fault description)
+        msg_desc = re.search(r'MSG\s+\d+.*?(?:TO\s+M\s+DB\s+)(.+?)(?:\s+EOR|$)', text, re.DOTALL)
+        if msg_desc:
+            result["system"] = msg_desc.group(1).strip()
+        else:
+            # Single-line CFB: extract CHECK/FAIL/WARN description
+            cfb_desc = re.search(r'(CHECK\s+.+?|FAIL\w*\s+.+?|FAULT\s+.+?|WARN\s+.+?|ALERT\s+.+?|INOP\s+.+?)(?:/ID|$)', text)
+            if cfb_desc:
+                result["system"] = cfb_desc.group(1).strip()
+            else:
+                # Fallback: extract after the date/code block
+                desc = re.search(r'\d{10,}([A-Z][A-Z\s&/()]+)', text)
+                if desc:
+                    result["system"] = desc.group(1).strip()
+
+        # Extract route from CFB if present (KDFW/KCLT)
+        route = re.search(r'(K[A-Z]{3,4})/(K[A-Z]{3,4})', text)
+        if route:
+            result["origin"] = route.group(1)
+            result["destination"] = route.group(2)
+
+        # Extract component ID after /ID
+        comp_id = re.search(r'/ID([A-Z0-9\s]+)', text)
+        if comp_id:
+            result["component"] = comp_id.group(1).strip()
+
+        result["text"] = text.replace("\r\n", " ").strip()[:200]
         return result
 
     return None
@@ -1247,30 +1279,16 @@ def summarize_message(category, parsed, flight="", tail=""):
                 parts.append(f"ATA code: {ata}")
         if system:
             parts.append(f"Issue: {system}")
-        elif component:
+        if component and component != system:
             parts.append(f"Component: {component}")
 
-        # Parse CFB fault text for human-readable details
-        if text:
-            # Extract meaningful parts from CFB messages
-            # e.g., "CHECK FDU APU LOOP AWARN CKT" or "AIR SUPPLY & CABIN PRESSURE CONTROLLER"
-            meaningful = ""
-            for keyword in ["CHECK ", "FAIL", "FAULT", "WARN", "ALERT", "INOP",
-                            "AIR SUPPLY", "CABIN PRESSURE", "LAVATORY", "OXYGEN",
-                            "HYDRAULIC", "FUEL", "ENGINE", "APU", "GENERATOR",
-                            "SMOKE", "FIRE", "DOOR", "GEAR", "BRAKE", "TIRE",
-                            "BLEED", "PACK", "VALVE", "PUMP", "SENSOR", "PROBE"]:
-                if keyword in text.upper():
-                    # Find the section containing this keyword
-                    idx = text.upper().find(keyword)
-                    # Get surrounding context
-                    start = max(0, text.rfind(" ", 0, max(0, idx - 20)))
-                    end = min(len(text), text.find("/", idx + 1) if "/" in text[idx:] else len(text))
-                    snippet = text[start:end].strip()
-                    if snippet and len(snippet) > len(meaningful):
-                        meaningful = snippet
-            if meaningful and not system:
-                parts.append(f"Detail: {meaningful}")
+        # Show route if available
+        origin = parsed.get("origin")
+        dest = parsed.get("destination")
+        if origin and dest:
+            parts.append(f"Route: {airport_name(origin)} to {airport_name(dest)}")
+        elif origin:
+            parts.append(f"At {airport_name(origin)}")
 
     elif category == CAT_FREE_TEXT:
         origin = parsed.get("origin")
