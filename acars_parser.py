@@ -895,6 +895,414 @@ def _parse_ops(label, text):
     return result
 
 
+# ── Airport names ─────────────────────────────────────────────────────────
+
+AIRPORT_NAMES = {
+    # Texas / DFW area
+    "KDFW": "Dallas Fort Worth International",
+    "KDAL": "Dallas Love Field",
+    "KFTW": "Fort Worth Meacham",
+    "KAFW": "Fort Worth Alliance",
+    "KADS": "Addison Airport",
+    "KRBD": "Dallas Executive",
+    "KGPM": "Grand Prairie Municipal",
+    "KGKY": "Arlington Municipal",
+    "KTKI": "McKinney National",
+    "KFWS": "Fort Worth Spinks",
+    "KCXO": "Conroe-North Houston Regional",
+    "KIAH": "Houston George Bush Intercontinental",
+    "KHOU": "Houston Hobby",
+    "KAUS": "Austin-Bergstrom International",
+    "KSAT": "San Antonio International",
+    "KELP": "El Paso International",
+    "KMAF": "Midland International",
+    "KAMA": "Amarillo Rick Husband International",
+    "KLBB": "Lubbock Preston Smith International",
+    "KCRP": "Corpus Christi International",
+    "KHRL": "Harlingen Valley International",
+    "KMFE": "McAllen Miller International",
+    # Major US hubs
+    "KATL": "Atlanta Hartsfield-Jackson",
+    "KORD": "Chicago O'Hare",
+    "KMDW": "Chicago Midway",
+    "KLAX": "Los Angeles International",
+    "KJFK": "New York JFK",
+    "KLGA": "New York LaGuardia",
+    "KEWR": "Newark Liberty International",
+    "KSFO": "San Francisco International",
+    "KDEN": "Denver International",
+    "KSEA": "Seattle-Tacoma International",
+    "KMCO": "Orlando International",
+    "KBOS": "Boston Logan International",
+    "KMSP": "Minneapolis-St. Paul International",
+    "KDTW": "Detroit Metro Wayne County",
+    "KPHL": "Philadelphia International",
+    "KCLT": "Charlotte Douglas International",
+    "KMIA": "Miami International",
+    "KFLL": "Fort Lauderdale-Hollywood International",
+    "KTPA": "Tampa International",
+    "KPHX": "Phoenix Sky Harbor International",
+    "KLAS": "Las Vegas Harry Reid International",
+    "KSLC": "Salt Lake City International",
+    "KBWI": "Baltimore/Washington International",
+    "KIAD": "Washington Dulles International",
+    "KDCA": "Washington Reagan National",
+    "KSAN": "San Diego International",
+    "KPDX": "Portland International",
+    "KSTL": "St. Louis Lambert International",
+    "KMCI": "Kansas City International",
+    "KBNA": "Nashville International",
+    "KRDU": "Raleigh-Durham International",
+    "KCLE": "Cleveland Hopkins International",
+    "KPIT": "Pittsburgh International",
+    "KCVG": "Cincinnati/Northern Kentucky International",
+    "KIND": "Indianapolis International",
+    "KMKE": "Milwaukee Mitchell International",
+    "KSMF": "Sacramento International",
+    "KONT": "Ontario International",
+    "KOAK": "Oakland International",
+    "KSJC": "San Jose Mineta International",
+    "KABQ": "Albuquerque International Sunport",
+    "KTUS": "Tucson International",
+    "KMEM": "Memphis International",
+    "KMSN": "Madison Dane County Regional",
+    "KJAN": "Jackson-Medgar Wiley Evers International",
+    "KLIT": "Little Rock Clinton National",
+    "KOKC": "Oklahoma City Will Rogers World",
+    "KTUL": "Tulsa International",
+    "KMSY": "New Orleans Louis Armstrong International",
+    "KJAX": "Jacksonville International",
+    "KRSW": "Fort Myers Southwest Florida International",
+    "KPBI": "West Palm Beach International",
+    "KBUF": "Buffalo Niagara International",
+    "KSYR": "Syracuse Hancock International",
+    "KPVD": "Providence T.F. Green International",
+    "KBDL": "Hartford Bradley International",
+    "KALB": "Albany International",
+    "KROC": "Rochester Greater Rochester International",
+    "KANC": "Anchorage Ted Stevens International",
+    "PHNL": "Honolulu Daniel K. Inouye International",
+    # Canadian
+    "CYYZ": "Toronto Pearson International",
+    "CYVR": "Vancouver International",
+    "CYUL": "Montreal-Trudeau International",
+    "CYYC": "Calgary International",
+    # Mexican
+    "MMMX": "Mexico City International",
+    "MMUN": "Cancun International",
+}
+
+
+def airport_name(code):
+    """Convert ICAO airport code to full name. Returns 'CODE (Unknown)' if not found."""
+    if not code:
+        return ""
+    code = code.strip().upper()
+    name = AIRPORT_NAMES.get(code)
+    if name:
+        return name
+    # Try without K prefix for domestic
+    if code.startswith("K") and len(code) == 4:
+        return code[1:] + " Airport"
+    return code
+
+
+def _fmt_alt(alt):
+    """Format altitude: 35000 -> 'FL350 (35,000 ft)'."""
+    if not alt:
+        return ""
+    alt = int(alt)
+    if alt >= 18000:
+        return f"FL{alt // 100} ({alt:,} ft)"
+    return f"{alt:,} ft"
+
+
+def _fmt_heading(hdg):
+    """Format heading with cardinal direction."""
+    if hdg is None:
+        return ""
+    hdg = int(hdg) % 360
+    dirs = ["north", "northeast", "east", "southeast", "south", "southwest", "west", "northwest"]
+    idx = round(hdg / 45) % 8
+    return f"{hdg}° ({dirs[idx]})"
+
+
+def _fmt_wind(wind_str):
+    """Parse wind string like 'P4' or 'M12' -> '+4°C' or '-12°C'."""
+    if not wind_str:
+        return ""
+    if wind_str.startswith("P"):
+        return f"+{wind_str[1:]}°C"
+    if wind_str.startswith("M"):
+        return f"-{wind_str[1:]}°C"
+    return wind_str
+
+
+# ── Message summary (plain English) ──────────────────────────────────────
+
+def summarize_message(category, parsed, flight="", tail=""):
+    """Generate a plain English summary of a parsed ACARS message.
+
+    Returns a human-readable string describing what the message contains
+    with actual values, not generic descriptions.
+    """
+    if not parsed or not isinstance(parsed, dict):
+        return ""
+
+    parts = []
+    who = flight.strip() if flight else (tail.strip() if tail else "Aircraft")
+
+    if category == CAT_POSITION:
+        lat = parsed.get("lat")
+        lon = parsed.get("lon")
+        alt = parsed.get("alt")
+        hdg = parsed.get("heading")
+        gs = parsed.get("groundspeed")
+        wp = parsed.get("waypoint")
+        nwp = parsed.get("next_waypoint")
+        dest = parsed.get("destination")
+        fuel = parsed.get("fuel")
+        eta = parsed.get("eta")
+
+        if lat is not None and lon is not None:
+            parts.append(f"Position: {abs(lat):.3f}°{'N' if lat >= 0 else 'S'}, {abs(lon):.3f}°{'W' if lon < 0 else 'E'}")
+        if alt:
+            parts.append(f"Altitude: {_fmt_alt(alt)}")
+        if hdg is not None:
+            parts.append(f"Heading: {_fmt_heading(hdg)}")
+        if gs:
+            parts.append(f"Ground speed: {gs} knots")
+        if wp:
+            wp_text = f"Over waypoint {wp}"
+            if nwp:
+                wp_text += f", next waypoint {nwp}"
+            parts.append(wp_text)
+        if dest:
+            parts.append(f"Destination: {airport_name(dest)}")
+        if fuel:
+            parts.append(f"Fuel remaining: {fuel:,} lbs")
+        if eta:
+            parts.append(f"ETA: {eta[:2]}:{eta[2:]}" if len(eta) == 4 else f"ETA: {eta}")
+
+    elif category == CAT_OOOI:
+        events = {
+            "out": "pushed back from the gate",
+            "off": "wheels off the runway (airborne)",
+            "on": "wheels on the runway (landed)",
+            "in": "arrived at the gate",
+            "toic": "time of initial contact",
+        }
+        event = parsed.get("event")
+        depa = parsed.get("depa")
+        dsta = parsed.get("dsta")
+        eta = parsed.get("eta")
+
+        if event:
+            parts.append(events.get(event, event).capitalize())
+        if depa and dsta:
+            parts.append(f"Flying from {airport_name(depa)} to {airport_name(dsta)}")
+        elif depa:
+            parts.append(f"Departing {airport_name(depa)}")
+        elif dsta:
+            parts.append(f"Arriving at {airport_name(dsta)}")
+
+        times = []
+        if parsed.get("gtout"):
+            times.append(f"gate departure {parsed['gtout']}")
+        if parsed.get("wloff"):
+            times.append(f"takeoff {parsed['wloff']}")
+        if parsed.get("wlon"):
+            times.append(f"landing {parsed['wlon']}")
+        if parsed.get("gtin"):
+            times.append(f"gate arrival {parsed['gtin']}")
+        if times:
+            parts.append("Times: " + ", ".join(times))
+        if eta:
+            parts.append(f"ETA: {eta[:2]}:{eta[2:]}" if len(eta) == 4 else f"ETA: {eta}")
+
+    elif category == CAT_WEATHER:
+        origin = parsed.get("origin")
+        dest = parsed.get("destination")
+        obs = parsed.get("observations", [])
+
+        if origin and dest:
+            parts.append(f"Weather report: {airport_name(origin)} to {airport_name(dest)}")
+        elif origin:
+            parts.append(f"Weather report from {airport_name(origin)}")
+
+        for ob in obs[:3]:
+            wind_dir = ob.get("wind_dir")
+            wind_spd = ob.get("wind_speed")
+            temp = ob.get("temp_c")
+            alt = ob.get("alt")
+            ob_parts = []
+            if wind_dir is not None and wind_spd is not None:
+                ob_parts.append(f"wind from {wind_dir}° at {wind_spd} knots")
+            if temp is not None:
+                temp_f = round(temp * 9 / 5 + 32)
+                ob_parts.append(f"temperature {temp_f}°F ({temp}°C)")
+            if alt:
+                ob_parts.append(f"at {_fmt_alt(alt)}")
+            if ob_parts:
+                parts.append("Conditions: " + ", ".join(ob_parts))
+
+    elif category == CAT_ENGINE:
+        etype = parsed.get("type", "")
+        origin = parsed.get("origin")
+        dest = parsed.get("destination")
+        atype = parsed.get("aircraft_type")
+
+        if etype == "dfb":
+            parts.append("Engine and flight data report — automated systems snapshot sent to airline maintenance")
+            if atype:
+                aircraft_types = {
+                    "A319": "Airbus A319", "A320": "Airbus A320", "A321": "Airbus A321",
+                    "A332": "Airbus A330-200", "A333": "Airbus A330-300",
+                    "B737": "Boeing 737", "B738": "Boeing 737-800", "B739": "Boeing 737-900",
+                    "B752": "Boeing 757-200", "B753": "Boeing 757-300",
+                    "B763": "Boeing 767-300", "B772": "Boeing 777-200", "B773": "Boeing 777-300",
+                    "B788": "Boeing 787-8 Dreamliner", "B789": "Boeing 787-9 Dreamliner",
+                    "CRJ2": "Bombardier CRJ-200", "CRJ7": "Bombardier CRJ-700",
+                    "CRJ9": "Bombardier CRJ-900", "E170": "Embraer E170", "E175": "Embraer E175",
+                    "E190": "Embraer E190", "E75L": "Embraer E175 Long Range",
+                }
+                parts.append(f"Aircraft type: {aircraft_types.get(atype, atype)}")
+        elif etype == "performance":
+            parts.append("Performance report — engine efficiency and flight parameter data")
+        elif etype == "engine_csv":
+            parts.append("Engine parameter data — RPM, temperatures, pressures sent to maintenance systems")
+        else:
+            parts.append("Engine telemetry data")
+
+        if origin and dest:
+            parts.append(f"Route: {airport_name(origin)} to {airport_name(dest)}")
+
+    elif category == CAT_FLIGHT_PLAN:
+        origin = parsed.get("origin")
+        dest = parsed.get("destination")
+        fn = parsed.get("flight_number")
+        wps = parsed.get("waypoints", [])
+        req_alt = parsed.get("requested_altitude")
+
+        if req_alt:
+            # Wind prediction request — decode the altitudes
+            alts = req_alt.split(".")
+            alt_strs = [_fmt_alt(int(a) * 100) for a in alts if a]
+            parts.append(f"Requesting wind forecasts at {', '.join(alt_strs)}")
+        elif origin and dest:
+            parts.append(f"Flight plan: {airport_name(origin)} to {airport_name(dest)}")
+        if fn:
+            parts.append(f"Flight number: {fn}")
+        if wps:
+            parts.append(f"Route: {' → '.join(wps[:8])}")
+            if len(wps) > 8:
+                parts[-1] += " …"
+
+    elif category == CAT_MAINTENANCE:
+        ata = parsed.get("ata_code")
+        system = parsed.get("system")
+        component = parsed.get("component")
+        text = parsed.get("text", "")
+
+        # ATA chapter names
+        ata_chapters = {
+            "21": "Air Conditioning & Pressurization",
+            "22": "Auto Flight",
+            "23": "Communications",
+            "24": "Electrical Power",
+            "25": "Equipment & Furnishings",
+            "26": "Fire Protection",
+            "27": "Flight Controls",
+            "28": "Fuel System",
+            "29": "Hydraulic Power",
+            "30": "Ice & Rain Protection",
+            "31": "Instruments",
+            "32": "Landing Gear",
+            "33": "Lights",
+            "34": "Navigation",
+            "35": "Oxygen",
+            "36": "Pneumatic",
+            "38": "Water & Waste",
+            "49": "Auxiliary Power Unit (APU)",
+            "52": "Doors",
+            "71": "Power Plant",
+            "72": "Engine (Turbine/Turboprop)",
+            "73": "Engine Fuel & Control",
+            "74": "Ignition",
+            "75": "Air (Engine Bleed)",
+            "76": "Engine Controls",
+            "77": "Engine Indicating",
+            "78": "Exhaust",
+            "79": "Oil",
+            "80": "Starting",
+        }
+
+        parts.append("MAINTENANCE FAULT REPORTED")
+        if ata:
+            chapter = ata.split("-")[0] if "-" in ata else ata[:2]
+            chapter_name = ata_chapters.get(chapter, "")
+            if chapter_name:
+                parts.append(f"System: {chapter_name} (ATA {ata})")
+            else:
+                parts.append(f"ATA code: {ata}")
+        if system:
+            parts.append(f"Issue: {system}")
+        elif component:
+            parts.append(f"Component: {component}")
+
+        # Parse CFB fault text for human-readable details
+        if text:
+            # Extract meaningful parts from CFB messages
+            # e.g., "CHECK FDU APU LOOP AWARN CKT" or "AIR SUPPLY & CABIN PRESSURE CONTROLLER"
+            meaningful = ""
+            for keyword in ["CHECK ", "FAIL", "FAULT", "WARN", "ALERT", "INOP",
+                            "AIR SUPPLY", "CABIN PRESSURE", "LAVATORY", "OXYGEN",
+                            "HYDRAULIC", "FUEL", "ENGINE", "APU", "GENERATOR",
+                            "SMOKE", "FIRE", "DOOR", "GEAR", "BRAKE", "TIRE",
+                            "BLEED", "PACK", "VALVE", "PUMP", "SENSOR", "PROBE"]:
+                if keyword in text.upper():
+                    # Find the section containing this keyword
+                    idx = text.upper().find(keyword)
+                    # Get surrounding context
+                    start = max(0, text.rfind(" ", 0, max(0, idx - 20)))
+                    end = min(len(text), text.find("/", idx + 1) if "/" in text[idx:] else len(text))
+                    snippet = text[start:end].strip()
+                    if snippet and len(snippet) > len(meaningful):
+                        meaningful = snippet
+            if meaningful and not system:
+                parts.append(f"Detail: {meaningful}")
+
+    elif category == CAT_FREE_TEXT:
+        origin = parsed.get("origin")
+        dest = parsed.get("destination")
+        message = parsed.get("message")
+        fn = parsed.get("flight_number")
+
+        if origin and dest:
+            parts.append(f"Message: {airport_name(origin)} to {airport_name(dest)}")
+        if fn:
+            parts.append(f"Flight {fn}")
+        if message:
+            parts.append(message[:200])
+
+    elif category == CAT_OPS:
+        etype = parsed.get("type")
+        station = parsed.get("station")
+        eta = parsed.get("eta")
+
+        if etype == "ack":
+            parts.append("System acknowledgment — confirming data received")
+        elif station:
+            parts.append(f"Operations check-in at {airport_name(station)}")
+        if eta:
+            parts.append(f"ETA: {eta[:2]}:{eta[2:]}" if len(eta) == 4 else f"ETA: {eta}")
+
+    elif category == CAT_KEEPALIVE:
+        parts.append("Heartbeat — aircraft checking in with airline data link")
+
+    return ". ".join(parts) if parts else ""
+
+
 # ── Public API ────────────────────────────────────────────────────────────
 
 def parse_and_enrich(msg):
@@ -903,9 +1311,15 @@ def parse_and_enrich(msg):
     Returns a new dict with all original fields plus:
       - category: str
       - parsed: dict with structured extracted data
+      - summary: str with plain English description
     """
     result = dict(msg)  # shallow copy
     parsed = parse_acars_message(msg)
     result["category"] = parsed["category"]
     result["parsed"] = parsed["parsed"]
+    result["summary"] = summarize_message(
+        parsed["category"], parsed["parsed"],
+        flight=msg.get("flight", ""),
+        tail=msg.get("tail", ""),
+    )
     return result

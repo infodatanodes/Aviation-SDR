@@ -459,7 +459,7 @@ def get_acars_parsed(limit=50):
     Uses acars_parser module for comprehensive message parsing across all
     ACARS label types (positions, OOOI, weather, engine, maintenance, etc).
     """
-    from acars_parser import parse_acars_message
+    from acars_parser import parse_acars_message, summarize_message
 
     messages = []
     try:
@@ -485,10 +485,17 @@ def get_acars_parsed(limit=50):
 
                 parsed_data = parse_acars_message(msg)
 
+                flight = (msg.get("flight") or "").strip()
+                tail = (msg.get("tail") or "").strip()
+                summary = summarize_message(
+                    parsed_data["category"], parsed_data["parsed"],
+                    flight=flight, tail=tail,
+                )
+
                 result = {
                     "timestamp": ts_iso,
-                    "flight": (msg.get("flight") or "").strip(),
-                    "tail": (msg.get("tail") or "").strip(),
+                    "flight": flight,
+                    "tail": tail,
                     "label": label,
                     "text": text,
                     "freq": msg.get("freq", ""),
@@ -496,6 +503,7 @@ def get_acars_parsed(limit=50):
                     "error": msg.get("error", 0),
                     "category": parsed_data["category"],
                     "parsed": parsed_data["parsed"],
+                    "summary": summary,
                 }
 
                 messages.append(result)
