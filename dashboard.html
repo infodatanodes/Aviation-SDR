@@ -628,6 +628,20 @@ function updateEmergencies(emergencies) {
     });
 }
 
+// -- SELF-HEALING WATCHDOG --
+let failCount = 0;
+let lastSuccessTime = Date.now();
+const MAX_FAILURES = 30;          // 30 consecutive failures (~60s at 2s interval)
+const MAX_STALE_MS = 5 * 60000;   // 5 minutes with no successful update
+
+function checkWatchdog() {
+    const staleDuration = Date.now() - lastSuccessTime;
+    if (failCount >= MAX_FAILURES || staleDuration >= MAX_STALE_MS) {
+        console.warn(`Watchdog triggered: ${failCount} failures, ${Math.round(staleDuration/1000)}s stale — reloading`);
+        window.location.reload();
+    }
+}
+
 // -- MAIN FETCH --
 async function fetchStats() {
     try {
@@ -635,6 +649,8 @@ async function fetchStats() {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
 
+        failCount = 0;
+        lastSuccessTime = Date.now();
         document.getElementById('conn-error').style.display = 'none';
 
         // Clock + uptime
@@ -648,12 +664,14 @@ async function fetchStats() {
 
         initialized = true;
     } catch (e) {
+        failCount++;
         document.getElementById('conn-error').style.display = 'inline';
         const now = new Date();
         document.getElementById('clock').textContent =
             String(now.getHours()).padStart(2, '0') + ':' +
             String(now.getMinutes()).padStart(2, '0') + ':' +
             String(now.getSeconds()).padStart(2, '0');
+        checkWatchdog();
     }
 }
 
