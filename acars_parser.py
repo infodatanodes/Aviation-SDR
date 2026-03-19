@@ -17,6 +17,7 @@ Usage:
 """
 
 import re
+from datetime import datetime
 
 # ── Category constants ────────────────────────────────────────────────────
 
@@ -246,7 +247,7 @@ def _parse_position(label, text):
 
 def _parse_h1_posn(text):
     """Parse #M1BPOSN32478W096547,DIETZ,021001,120,WHOOT,021241,HEDMN,P4,25134,checksum"""
-    m = re.search(r'POSN(\d{5})([EW])(\d{6}),(\w+),(\d{6}),(\d+),(\w+),(\d{6}),(\w+),([PM]\d+),(\d+)', text)
+    m = re.search(r'POSN(\d{5})([EW])(\d{6}),(\w*),(\d{6}),(\d+),(\w+),(\d{6}),(\w+),([PM]\d+),(\d+)', text)
     if not m:
         return None
 
@@ -617,6 +618,104 @@ def _parse_engine(label, text):
     if "#DFB" in text:
         result = {"type": "dfb"}
 
+        # ── DFB R12: Position/performance report (e.g. FedEx) ────────
+        # Format: #DFBR12/TAILDDMMMHHMMSS...
+        # Position lines: /HHMMSS lat lon alt heading speed
+        r12_match = re.search(r'#DFBR12/([A-Z0-9]+)(\d{2}[A-Z]{3})(\d{6})', text)
+        if r12_match:
+            result["type"] = "dfb_r12"
+            result["tail"] = r12_match.group(1)
+            result["date"] = r12_match.group(2)
+            result["time_utc"] = r12_match.group(3)
+            # Parse position lines: /HHMMSS lat*100 lon*100 alt heading speed
+            # Parse position lines — format varies:
+            # /HHMMSS lat*100 lon*100 alt track+speed  (compact)
+            # Fields may run together without spaces for larger values
+            pos_lines = re.findall(
+                r'/(\d{6})\s+(-?\d{3,5})\s+(-?\d{4,6})\s*(-?\d{3,6})\s+(-?\d{1,4})\s*(\d{2,3})\s+(\d{1,4})',
+                text
+            )
+            positions = []
+            for pt, lat_r, lon_r, alt_r, vs_or_extra, trk, spd in pos_lines:
+                time_str = f"{pt[:2]}:{pt[2:4]}:{pt[4:6]}Z"
+                # Lat/lon are in degrees*100 format (3296 = 32.96°)
+                lat_f = float(lat_r)
+                lon_f = float(lon_r)
+                lat = lat_f / 100.0 if abs(lat_f) > 90 else lat_f
+                lon = lon_f / 100.0 if abs(lon_f) > 180 else lon_f
+                alt = int(alt_r)
+                positions.append({
+                    "time": time_str,
+                    "lat": round(lat, 4),
+                    "lon": round(lon, 4),
+                    "alt_ft": alt,
+                    "track": int(trk),
+                    "speed_kt": int(spd),
+                })
+            if positions:
+                result["positions"] = positions
+            return result
+
+        # ── DFB CET: Route header (e.g. Singapore Cargo) ────────────
+        # Format: #DFBCET<tail><flight><origin><dest><date><time>
+        # Origin/dest can be ICAO (KDFW, PANC) — 4 letters starting with K/P/C/E/L/R etc
+        cet_match = re.search(
+            r'#DFBCET([A-Z0-9-]+?)(\d{3,5})([A-Z]{4})([A-Z]{4})(\d{6})(\d{6})',
+            text
+        )
+        if cet_match:
+            result["type"] = "dfb_cet"
+            result["tail"] = cet_match.group(1)
+            result["flight_num"] = cet_match.group(2)
+            result["origin"] = cet_match.group(3)
+            result["destination"] = cet_match.group(4)
+            result["date"] = cet_match.group(5)
+            result["time_utc"] = cet_match.group(6)
+            return result
+
+        # ── DFB 4-engine parameter block ─────────────────────────────
+        # Multi-line numeric rows: 4 columns = 4 engines (747, A340, etc)
+        # Rows typically: N1, N2, EGT, Oil Press, Fuel Flow, then valve states
+        lines = text.split('\n')
+        engine_rows = []
+        valve_rows = []
+        for line in lines:
+            line = line.strip()
+            if not line or line.startswith('#'):
+                continue
+            # 4-column numeric row (engine params)
+            nums = re.findall(r'-?\d+', line)
+            if len(nums) == 4 and all(len(n) >= 2 for n in nums):
+                engine_rows.append([int(n) for n in nums])
+            # Valve state rows (SEL/LCK/RET/OPN/OFF etc)
+            valves = re.findall(r'[A-Z]{3}', line)
+            if len(valves) == 4 and all(v in ("SEL", "LCK", "RET", "OPN", "OFF", "CLO", "NRM") for v in valves):
+                valve_rows.append(valves)
+
+        if len(engine_rows) >= 3:
+            result["type"] = "dfb_engine_params"
+            result["num_engines"] = 4
+            result["param_rows"] = engine_rows
+            # Try to identify rows by typical value ranges
+            # N1/N2: 80-105%, EGT: 300-900°C, Oil: 30-100 psi, FF: 1000-6000 lb/hr
+            param_labels = []
+            for row in engine_rows:
+                avg = sum(row) / len(row)
+                if 70 <= avg <= 110:
+                    param_labels.append("N1/N2 (%)")
+                elif 200 <= avg <= 999:
+                    param_labels.append("EGT (°C)")
+                elif 1000 <= avg <= 9999:
+                    param_labels.append("Fuel Flow (lb/hr)")
+                elif 10 <= avg <= 69:
+                    param_labels.append("Oil Press (psi)")
+                else:
+                    param_labels.append(f"Param ({int(avg)} avg)")
+            result["param_labels"] = param_labels
+            if valve_rows:
+                result["valve_states"] = valve_rows
+            return result
+
         # Aircraft type
         atype = re.search(r'#DFB([A-Z]\d{3})', text)
         if atype:
@@ -713,6 +812,74 @@ def _parse_weather(label, text):
 
 # ── Maintenance ───────────────────────────────────────────────────────────
 
+# Airbus flight phase codes (FWC-generated, 10 phases)
+_FLIGHT_PHASES = {
+    "01": "Pre-flight (doors)",
+    "02": "Engine start",
+    "03": "Taxi out",
+    "04": "Takeoff roll",
+    "05": "Initial climb",
+    "06": "Cruise",
+    "07": "Descent",
+    "08": "Approach",
+    "09": "Landing roll",
+    "10": "Post-flight",
+}
+
+# Known avionics system abbreviations found in CFB /ID fields
+_SYSTEM_ABBREVIATIONS = {
+    "ECAM 1": "ECAM Ch1 (Captain's monitoring)",
+    "ECAM 2": "ECAM Ch2 (F/O's monitoring)",
+    "EIS 1": "Electronic Instruments (Captain)",
+    "EIS 2": "Electronic Instruments (F/O)",
+    "EIS 3": "Electronic Instruments (Backup)",
+    "SFCC1": "Slat/Flap Control Computer 1",
+    "SFCC2": "Slat/Flap Control Computer 2",
+    "FWC": "Flight Warning Computer",
+    "FWC1": "Flight Warning Computer 1",
+    "FWC2": "Flight Warning Computer 2",
+    "ADR1": "Air Data Reference 1",
+    "ADR2": "Air Data Reference 2",
+    "ADR3": "Air Data Reference 3",
+    "FMGC1": "Flight Management Computer 1",
+    "FMGC2": "Flight Management Computer 2",
+    "FAC1": "Flight Augmentation Computer 1",
+    "FAC2": "Flight Augmentation Computer 2",
+    "DMC1": "Display Management Computer 1",
+    "DMC2": "Display Management Computer 2",
+    "DMC3": "Display Management Computer 3",
+    "SEC1": "Spoiler/Elevator Computer 1",
+    "SEC2": "Spoiler/Elevator Computer 2",
+    "SEC3": "Spoiler/Elevator Computer 3",
+    "ELAC1": "Elevator/Aileron Computer 1",
+    "ELAC2": "Elevator/Aileron Computer 2",
+    "LGCIU1": "Landing Gear Control Unit 1",
+    "LGCIU2": "Landing Gear Control Unit 2",
+    "TCAS": "Traffic Collision Avoidance System",
+    "GPWS": "Ground Proximity Warning System",
+    "EGPWS": "Enhanced GPWS",
+    "FADEC": "Full Authority Digital Engine Control",
+    "FADEC1": "FADEC Engine 1",
+    "FADEC2": "FADEC Engine 2",
+    "APU": "Auxiliary Power Unit",
+    "CFDIU": "Centralized Fault Display Interface Unit",
+    "ATSU": "Air Traffic Services Unit",
+    "SDAC1": "System Data Acquisition Concentrator 1",
+    "SDAC2": "System Data Acquisition Concentrator 2",
+    "IRS1": "Inertial Reference System 1",
+    "IRS2": "Inertial Reference System 2",
+    "IRS3": "Inertial Reference System 3",
+    "ADIRU1": "Air Data Inertial Reference Unit 1",
+    "ADIRU2": "Air Data Inertial Reference Unit 2",
+    "ADIRU3": "Air Data Inertial Reference Unit 3",
+    "CPIOM": "Core Processing I/O Module",
+    "ACSC1": "Air Conditioning System Controller 1",
+    "ACSC2": "Air Conditioning System Controller 2",
+    "BMC1": "Bleed Monitoring Computer 1",
+    "BMC2": "Bleed Monitoring Computer 2",
+}
+
+
 def _parse_maintenance(label, text):
     """Parse maintenance/fault messages."""
     # #CFB prefix (common fault block) — check FIRST before generic FAULT detection
@@ -723,37 +890,127 @@ def _parse_maintenance(label, text):
         if ata:
             result["ata_code"] = ata.group(1)
 
-        # Parse CFB fault message formats:
+        # ── CFB vibration/measurement data ───────────────────────────
+        # Format: #CFB5  L  2.9\n 6  UP  2.8 UP  2.8 DN  2.3 DN  2.9\n ...
+        # or #CFB00 10.00\n 16 DN  1.54 DN  1.91 ...
+        vib_readings = re.findall(r'(UP|DN|L|R)\s+(\d+\.\d+)', text)
+        if vib_readings:
+            result["type"] = "cfb_vibration"
+            measurements = []
+            for direction, value in vib_readings:
+                dir_names = {"UP": "Up", "DN": "Down", "L": "Left", "R": "Right"}
+                measurements.append(f"{dir_names.get(direction, direction)} {value}")
+            result["vibration_readings"] = measurements
+
+        # ── CFB date/time stamp (old format: 13DEC02 12:34:56) ──────
+        cfb_ts = re.search(r'(\d{2}[A-Z]{3}\d{2})\s+(\d{2}:\d{2}:\d{2})', text)
+        if cfb_ts:
+            result["cfb_timestamp"] = f"{cfb_ts.group(1)} {cfb_ts.group(2)}"
+
+        # ── CFB structured fault message parsing ─────────────────────
+        # Format: #CFBFLR/FR YYMMDDHHMM[SS] ATAATA PHASE SOURCE /ID systems ,SEVERITY
+        # Example: #CFBFLR/FR19121418400034433406TCAS (1SG) /IDTCAS ,EIS 2 ,ECAM 2
+        # Example: #CFBWRN/WN26031512490028000006FUEL CTR R XFR FAULT
+        # Example: #CFB.1/FLR/FR1602082254 27513406ADR1 X2,...,HARD
+
+        # Determine CFB prefix type
+        cfb_prefix = ""
+        for pfx in ("#CFBFLR", "#CFBWRN", "#CFBFDE", "#CFBECT", "#CFBMPF",
+                     "#CFBMIL", "#CFBLIGHTS", "#CFBATA", "#CFBAL", "#CFB.1/FLR"):
+            if pfx in text:
+                cfb_prefix = pfx
+                result["cfb_prefix"] = pfx
+                break
+
+        # Parse structured fields: timestamp + 6-digit ATA + 2-digit flight phase
+        # Match after /FR or /WN or /FDE + digits block (allow optional space)
+        structured = re.search(
+            r'/(?:FR|WN|FDE|ECT)(\d{10,12})\s*(\d{6})(\d{2})(.*?)(?:/ID|,HARD|,INT|$)',
+            text, re.DOTALL
+        )
+        if structured:
+            ts_raw = structured.group(1)
+            ata_6digit = structured.group(2)
+            phase_code = structured.group(3)
+            source_text = structured.group(4).strip()
+
+            # Decode timestamp (YYMMDDHHMM or YYMMDDHHMMSS)
+            try:
+                if len(ts_raw) == 12:
+                    dt = datetime.strptime(ts_raw, "%y%m%d%H%M%S")
+                else:
+                    dt = datetime.strptime(ts_raw, "%y%m%d%H%M")
+                result["fault_time"] = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+            except ValueError:
+                result["fault_time_raw"] = ts_raw
+
+            # Decode 6-digit ATA code (CCSSDD = chapter-section-detail)
+            result["ata_code"] = f"{ata_6digit[:2]}-{ata_6digit[2:4]}-{ata_6digit[4:6]}"
+            result["ata_chapter"] = ata_6digit[:2]
+
+            # Decode flight phase
+            result["flight_phase_code"] = phase_code
+            result["flight_phase"] = _FLIGHT_PHASES.get(phase_code, f"Phase {phase_code}")
+
+            # Source system (text between phase and /ID or severity)
+            if source_text:
+                # Clean up: remove leading digits, commas from multi-component lists
+                source_clean = re.sub(r'^[\d\s]+', '', source_text).strip()
+                if source_clean:
+                    result["source_system"] = source_clean
+                    if not result.get("system"):
+                        result["system"] = source_clean
+
+        # ── Severity extraction (HARD or INT at end) ─────────────────
+        if ",HARD" in text or text.rstrip().endswith("HARD"):
+            result["severity"] = "HARD"
+            result["severity_desc"] = "Persistent (non-intermittent) fault"
+        elif ",INT" in text or text.rstrip().endswith("INT"):
+            result["severity"] = "INT"
+            result["severity_desc"] = "Intermittent fault"
+
+        # ── Affected systems from /ID field ──────────────────────────
+        id_match = re.search(r'/ID(.+?)(?:,HARD|,INT|$)', text, re.DOTALL)
+        if id_match:
+            id_text = id_match.group(1).strip()
+            # Split on comma, clean up each identifier
+            affected = [s.strip() for s in id_text.split(",") if s.strip()]
+            result["affected_systems"] = affected
+            # Decode known system abbreviations
+            decoded_systems = []
+            for sys_id in affected:
+                decoded = _SYSTEM_ABBREVIATIONS.get(sys_id.upper(), sys_id)
+                decoded_systems.append(decoded)
+            result["affected_systems_decoded"] = decoded_systems
+            # First /ID entry is typically the primary component
+            if affected:
+                result["component"] = affected[0]
+
+        # Parse CFB fault message formats (fallback for non-structured):
         # #CFBFLR/FR...CHECK FDU APU LOOP AWARN CKT/IDFDU APU
         # #CFBRTE...MSG...TO M DB AIR SUPPLY & CABIN PRESSURE CONTROLLER (R) EOR
 
         # Look for MSG line in multi-line CFB (contains the actual fault description)
-        msg_desc = re.search(r'MSG\s+\d+.*?(?:TO\s+M\s+DB\s+)(.+?)(?:\s+EOR|$)', text, re.DOTALL)
-        if msg_desc:
-            result["system"] = msg_desc.group(1).strip()
-        else:
-            # Single-line CFB: extract text after long numeric code block
-            # e.g. #CFBWRN/WN26031512490028000006FUEL CTR R XFR FAULT
-            # e.g. #CFBFLR/FR...CHECK FDU APU LOOP AWARN CKT/IDFDU APU
-            after_digits = re.search(r'\d{6,}([A-Z][A-Z\s&/()\-]+?)(?:/ID|$)', text)
-            if after_digits:
-                result["system"] = after_digits.group(1).strip()
-            else:
-                # Try extracting CHECK/FAIL/WARN description with context
-                cfb_desc = re.search(r'((?:CHECK|FAIL\w*|FAULT|WARN|ALERT|INOP)\s*.+?)(?:/ID|$)', text)
-                if cfb_desc:
-                    result["system"] = cfb_desc.group(1).strip()
+        if not result.get("system"):
+            msg_desc = re.search(r'MSG\s+\d+.*?(?:TO\s+M\s+DB\s+)(.+?)(?:\s+EOR|$)', text, re.DOTALL)
+            if msg_desc:
+                result["system"] = msg_desc.group(1).strip()
+            elif result.get("type") != "cfb_vibration":
+                # Single-line CFB: extract text after long numeric code block
+                after_digits = re.search(r'\d{6,}([A-Z][A-Z\s&/()\-]+?)(?:/ID|$)', text)
+                if after_digits:
+                    result["system"] = after_digits.group(1).strip()
+                else:
+                    # Try extracting CHECK/FAIL/WARN description with context
+                    cfb_desc = re.search(r'((?:CHECK|FAIL\w*|FAULT|WARN|ALERT|INOP)\s*.+?)(?:/ID|$)', text)
+                    if cfb_desc:
+                        result["system"] = cfb_desc.group(1).strip()
 
         # Extract route from CFB if present (KDFW/KCLT)
         route = re.search(r'(K[A-Z]{3,4})/(K[A-Z]{3,4})', text)
         if route:
             result["origin"] = route.group(1)
             result["destination"] = route.group(2)
-
-        # Extract component ID after /ID
-        comp_id = re.search(r'/ID([A-Z0-9\s]+)', text)
-        if comp_id:
-            result["component"] = comp_id.group(1).strip()
 
         result["text"] = text.replace("\r\n", " ").strip()[:200]
         return result
@@ -901,6 +1158,25 @@ def _parse_h1_subtype(text):
             result["waypoints"] = wpts[:20]
         return {"category": CAT_FLIGHT_PLAN, "parsed": result}
 
+    # #M1BREJ — route rejection/amendment with waypoints and timing
+    # e.g. #M1BREJPWI,081235,130,112,WD009,WITTI.130,112,WD009,GAYLL/TS081236
+    if text.startswith("#M1BREJ"):
+        result = {"type": "route_amendment"}
+        # Extract waypoints (5-letter ICAO waypoint names)
+        wpts = re.findall(r'([A-Z]{5})', text)
+        if wpts:
+            result["waypoints"] = wpts
+        # Extract timestamp
+        ts_match = re.search(r'/TS(\d{6})', text)
+        if ts_match:
+            t = ts_match.group(1)
+            result["timestamp_utc"] = f"{t[:2]}:{t[2:4]}:{t[4:6]}Z"
+        # Extract flight level/altitude (3-digit numbers after waypoints)
+        fls = re.findall(r',(\d{3}),', text)
+        if fls:
+            result["flight_levels"] = [f"FL{fl}" for fl in fls if int(fl) >= 100]
+        return {"category": CAT_FLIGHT_PLAN, "parsed": result}
+
     # #M1BPER — performance data
     if text.startswith("#M1BPER"):
         return {"category": CAT_ENGINE, "parsed": {"type": "performance"}}
@@ -909,8 +1185,28 @@ def _parse_h1_subtype(text):
 
 
 def _parse_ops(label, text):
-    """Parse airline ops messages (5Z, Q7, etc)."""
+    """Parse airline ops messages (5Z, Q7, B9, etc)."""
     result = {}
+
+    # B9: routing info — /KXXX.TI2/021KDENC0234
+    # Format: /destination.terminal_info/gate_or_routing
+    dest_match = re.search(r'/(K[A-Z]{3,4})\.(\w+)', text)
+    if dest_match:
+        result["destination"] = dest_match.group(1)
+        result["terminal_info"] = dest_match.group(2)
+    # Also look for ICAO codes in plain text
+    icao_codes = re.findall(r'(K[A-Z]{3})', text)
+    if icao_codes:
+        if "destination" not in result:
+            result["destination"] = icao_codes[0]
+        if len(icao_codes) >= 2 and "origin" not in result:
+            result["origin"] = icao_codes[0]
+            result["destination"] = icao_codes[-1]
+
+    # Gate/stand info
+    gate = re.search(r'[/\s]([A-Z]\d{1,3}[A-Z]?)\s*$', text)
+    if gate:
+        result["gate"] = gate.group(1)
 
     # 5Z: "OS KDFW /IR KDFW0118"
     station = re.search(r'OS\s+(K[A-Z]{3,4})', text)
@@ -1011,15 +1307,34 @@ AIRPORT_NAMES = {
     "KALB": "Albany International",
     "KROC": "Rochester Greater Rochester International",
     "KANC": "Anchorage Ted Stevens International",
+    "KFAI": "Fairbanks International",
+    "KSDF": "Louisville Muhammad Ali International",
+    # Alaska/Pacific (P prefix)
+    "PANC": "Anchorage Ted Stevens International",
+    "PAFA": "Fairbanks International",
     "PHNL": "Honolulu Daniel K. Inouye International",
+    "PHOG": "Kahului Airport (Maui)",
     # Canadian
     "CYYZ": "Toronto Pearson International",
     "CYVR": "Vancouver International",
     "CYUL": "Montreal-Trudeau International",
     "CYYC": "Calgary International",
+    "CYWG": "Winnipeg James Armstrong Richardson",
     # Mexican
     "MMMX": "Mexico City International",
     "MMUN": "Cancun International",
+    "MMGL": "Guadalajara International",
+    # Major International (cargo routes from DFW)
+    "EDDF": "Frankfurt am Main",
+    "EGLL": "London Heathrow",
+    "RJTT": "Tokyo Haneda",
+    "RJAA": "Tokyo Narita",
+    "RKSI": "Seoul Incheon",
+    "VHHH": "Hong Kong International",
+    "WSSS": "Singapore Changi",
+    "OMDB": "Dubai International",
+    "LFPG": "Paris Charles de Gaulle",
+    "EHAM": "Amsterdam Schiphol",
 }
 
 
@@ -1182,25 +1497,70 @@ def summarize_message(category, parsed, flight="", tail=""):
         dest = parsed.get("destination")
         atype = parsed.get("aircraft_type")
 
-        if etype == "dfb":
-            parts.append("Engine and flight data report — automated systems snapshot sent to airline maintenance")
+        aircraft_types = {
+            "A319": "Airbus A319", "A320": "Airbus A320", "A321": "Airbus A321",
+            "A332": "Airbus A330-200", "A333": "Airbus A330-300",
+            "B737": "Boeing 737", "B738": "Boeing 737-800", "B739": "Boeing 737-900",
+            "B752": "Boeing 757-200", "B753": "Boeing 757-300",
+            "B763": "Boeing 767-300", "B772": "Boeing 777-200", "B773": "Boeing 777-300",
+            "B788": "Boeing 787-8 Dreamliner", "B789": "Boeing 787-9 Dreamliner",
+            "CRJ2": "Bombardier CRJ-200", "CRJ7": "Bombardier CRJ-700",
+            "CRJ9": "Bombardier CRJ-900", "E170": "Embraer E170", "E175": "Embraer E175",
+            "E190": "Embraer E190", "E75L": "Embraer E175 Long Range",
+        }
+
+        if etype == "dfb_r12":
+            # Position/performance climb data
+            positions = parsed.get("positions", [])
+            tail = parsed.get("tail", "")
+            if tail:
+                parts.append(f"Tail: {tail}")
+            if positions:
+                first = positions[0]
+                last = positions[-1]
+                parts.append(f"Climb/descent track: {len(positions)} fixes")
+                parts.append(f"From {first['alt_ft']:,} ft → {last['alt_ft']:,} ft")
+                parts.append(f"Start: {first['time']} at {first['lat']:.2f}°, {first['lon']:.2f}° trk {first['track']}° {first['speed_kt']} kt")
+                if len(positions) > 1:
+                    parts.append(f"End: {last['time']} at {last['lat']:.2f}°, {last['lon']:.2f}° trk {last['track']}° {last['speed_kt']} kt")
+            else:
+                parts.append("Position/performance report")
+        elif etype == "dfb_cet":
+            # Route header with origin/dest
+            tail = parsed.get("tail", "")
+            fnum = parsed.get("flight_num", "")
+            if tail:
+                parts.append(f"Tail: {tail}")
+            if fnum:
+                parts.append(f"Flight: {fnum}")
+            if origin and dest:
+                parts.append(f"Route: {airport_name(origin)} → {airport_name(dest)}")
+            t = parsed.get("time_utc", "")
+            if t:
+                parts.append(f"Time: {t[:2]}:{t[2:4]}:{t[4:6]}Z")
+        elif etype == "dfb_engine_params":
+            # 4-engine parameter block
+            n_eng = parsed.get("num_engines", 4)
+            param_labels = parsed.get("param_labels", [])
+            param_rows = parsed.get("param_rows", [])
+            parts.append(f"{n_eng}-engine parameter snapshot")
+            for i, (label_str, row) in enumerate(zip(param_labels, param_rows)):
+                vals = " / ".join(str(v) for v in row)
+                parts.append(f"{label_str}: [{vals}]")
+                if i >= 5:
+                    parts.append(f"... +{len(param_rows) - 6} more rows")
+                    break
+            valves = parsed.get("valve_states", [])
+            if valves:
+                parts.append(f"Valve states: {' | '.join('/'.join(v) for v in valves[:3])}")
+        elif etype == "dfb":
+            parts.append("Engine and flight data report")
             if atype:
-                aircraft_types = {
-                    "A319": "Airbus A319", "A320": "Airbus A320", "A321": "Airbus A321",
-                    "A332": "Airbus A330-200", "A333": "Airbus A330-300",
-                    "B737": "Boeing 737", "B738": "Boeing 737-800", "B739": "Boeing 737-900",
-                    "B752": "Boeing 757-200", "B753": "Boeing 757-300",
-                    "B763": "Boeing 767-300", "B772": "Boeing 777-200", "B773": "Boeing 777-300",
-                    "B788": "Boeing 787-8 Dreamliner", "B789": "Boeing 787-9 Dreamliner",
-                    "CRJ2": "Bombardier CRJ-200", "CRJ7": "Bombardier CRJ-700",
-                    "CRJ9": "Bombardier CRJ-900", "E170": "Embraer E170", "E175": "Embraer E175",
-                    "E190": "Embraer E190", "E75L": "Embraer E175 Long Range",
-                }
                 parts.append(f"Aircraft type: {aircraft_types.get(atype, atype)}")
         elif etype == "performance":
-            parts.append("Performance report — engine efficiency and flight parameter data")
+            parts.append("Performance report — engine efficiency and flight parameters")
         elif etype == "engine_csv":
-            parts.append("Engine parameter data — RPM, temperatures, pressures sent to maintenance systems")
+            parts.append("Engine parameter data — RPM, temperatures, pressures")
         else:
             parts.append("Engine telemetry data")
 
@@ -1214,7 +1574,19 @@ def summarize_message(category, parsed, flight="", tail=""):
         wps = parsed.get("waypoints", [])
         req_alt = parsed.get("requested_altitude")
 
-        if req_alt:
+        ftype = parsed.get("type", "")
+        fls = parsed.get("flight_levels", [])
+        ts_utc = parsed.get("timestamp_utc", "")
+
+        if ftype == "route_amendment":
+            parts.append("Route amendment/rejection")
+            if wps:
+                parts.append(f"Waypoints: {' → '.join(wps[:8])}")
+            if fls:
+                parts.append(f"Flight levels: {', '.join(fls)}")
+            if ts_utc:
+                parts.append(f"Time: {ts_utc}")
+        elif req_alt:
             # Wind prediction request — decode the altitudes
             alts = req_alt.split(".")
             alt_strs = [_fmt_alt(int(a) * 100) for a in alts if a]
@@ -1223,7 +1595,7 @@ def summarize_message(category, parsed, flight="", tail=""):
             parts.append(f"Flight plan: {airport_name(origin)} to {airport_name(dest)}")
         if fn:
             parts.append(f"Flight number: {fn}")
-        if wps:
+        if wps and ftype != "route_amendment":
             parts.append(f"Route: {' → '.join(wps[:8])}")
             if len(wps) > 8:
                 parts[-1] += " …"
@@ -1234,7 +1606,7 @@ def summarize_message(category, parsed, flight="", tail=""):
         component = parsed.get("component")
         text = parsed.get("text", "")
 
-        # ATA chapter names
+        # ATA chapter names — complete ATA 100 reference
         ata_chapters = {
             "21": "Air Conditioning & Pressurization",
             "22": "Auto Flight",
@@ -1246,15 +1618,27 @@ def summarize_message(category, parsed, flight="", tail=""):
             "28": "Fuel System",
             "29": "Hydraulic Power",
             "30": "Ice & Rain Protection",
-            "31": "Instruments",
+            "31": "Instruments / Indicating & Recording",
             "32": "Landing Gear",
             "33": "Lights",
             "34": "Navigation",
             "35": "Oxygen",
             "36": "Pneumatic",
+            "37": "Vacuum",
             "38": "Water & Waste",
+            "39": "Electrical/Electronic Panels",
+            "42": "Integrated Modular Avionics",
+            "44": "Cabin Systems",
+            "45": "Central Maintenance System",
+            "46": "Information Systems",
+            "47": "Inert Gas System",
             "49": "Auxiliary Power Unit (APU)",
             "52": "Doors",
+            "53": "Fuselage",
+            "54": "Nacelles / Pylons",
+            "55": "Stabilizers",
+            "56": "Windows",
+            "57": "Wings",
             "71": "Power Plant",
             "72": "Engine (Turbine/Turboprop)",
             "73": "Engine Fuel & Control",
@@ -1265,9 +1649,40 @@ def summarize_message(category, parsed, flight="", tail=""):
             "78": "Exhaust",
             "79": "Oil",
             "80": "Starting",
+            "81": "Turbines",
+            "82": "Water Injection",
+            "83": "Accessory Gear Boxes",
+            "84": "Propulsion Augmentation",
         }
 
-        parts.append("MAINTENANCE FAULT REPORTED")
+        mtype = parsed.get("type", "fault")
+
+        if mtype == "cfb_vibration":
+            # Vibration/measurement data
+            readings = parsed.get("vibration_readings", [])
+            cfb_ts = parsed.get("cfb_timestamp", "")
+            parts.append("Vibration/component measurement report")
+            if cfb_ts:
+                parts.append(f"Recorded: {cfb_ts}")
+            if readings:
+                parts.append(f"Readings: {', '.join(readings[:8])}")
+                if len(readings) > 8:
+                    parts.append(f"... +{len(readings) - 8} more readings")
+        else:
+            # Build descriptive fault header
+            severity = parsed.get("severity", "")
+            cfb_prefix = parsed.get("cfb_prefix", "")
+            prefix_names = {
+                "#CFBFLR": "REALTIME FAILURE",
+                "#CFBWRN": "WARNING",
+                "#CFBFDE": "FLIGHT DECK EFFECT",
+                "#CFBECT": "COMPONENT TEST FAULT",
+                "#CFBMPF": "MAINTENANCE PLANNING",
+                "#CFB.1/FLR": "REALTIME FAILURE",
+            }
+            fault_type = prefix_names.get(cfb_prefix, "MAINTENANCE FAULT")
+            parts.append(f"{fault_type} REPORTED")
+
         if ata:
             chapter = ata.split("-")[0] if "-" in ata else ata[:2]
             chapter_name = ata_chapters.get(chapter, "")
@@ -1275,10 +1690,38 @@ def summarize_message(category, parsed, flight="", tail=""):
                 parts.append(f"System: {chapter_name} (ATA {ata})")
             else:
                 parts.append(f"ATA code: {ata}")
+
+        # Severity
+        severity = parsed.get("severity")
+        if severity:
+            sev_desc = parsed.get("severity_desc", severity)
+            parts.append(f"Severity: {severity} ({sev_desc})")
+
+        # Flight phase
+        flight_phase = parsed.get("flight_phase")
+        phase_code = parsed.get("flight_phase_code")
+        if flight_phase:
+            parts.append(f"Flight phase: {flight_phase}")
+
+        # Fault time
+        fault_time = parsed.get("fault_time")
+        if fault_time:
+            parts.append(f"Fault time: {fault_time}")
+
+        # Source system
+        source_sys = parsed.get("source_system")
+        if source_sys and source_sys != system:
+            parts.append(f"Source: {source_sys}")
+
         if system:
             parts.append(f"Issue: {system}")
-        if component and component != system:
+        if component and component != system and component != source_sys:
             parts.append(f"Component: {component}")
+
+        # Affected/correlated systems from /ID field
+        affected = parsed.get("affected_systems_decoded")
+        if affected:
+            parts.append(f"Also affected: {', '.join(affected)}")
 
         # Show route if available
         origin = parsed.get("origin")
@@ -1306,10 +1749,25 @@ def summarize_message(category, parsed, flight="", tail=""):
         station = parsed.get("station")
         eta = parsed.get("eta")
 
+        dest = parsed.get("destination")
+        origin = parsed.get("origin")
+        gate = parsed.get("gate")
+        terminal = parsed.get("terminal_info")
+
         if etype == "ack":
             parts.append("System acknowledgment — confirming data received")
+        elif origin and dest:
+            parts.append(f"Routing: {airport_name(origin)} → {airport_name(dest)}")
+        elif dest:
+            parts.append(f"Routing to {airport_name(dest)}")
         elif station:
             parts.append(f"Operations check-in at {airport_name(station)}")
+        else:
+            parts.append("Airline operations message")
+        if terminal:
+            parts.append(f"Terminal: {terminal}")
+        if gate:
+            parts.append(f"Gate: {gate}")
         if eta:
             parts.append(f"ETA: {eta[:2]}:{eta[2:]}" if len(eta) == 4 else f"ETA: {eta}")
 
@@ -1317,6 +1775,121 @@ def summarize_message(category, parsed, flight="", tail=""):
         parts.append("Heartbeat — aircraft checking in with airline data link")
 
     return ". ".join(parts) if parts else ""
+
+
+# ── Alert Classification ──────────────────────────────────────────────────
+# Based on aircraft-self-reported fault types, NOT assumed numeric thresholds.
+# The aircraft's CMC (Central Maintenance Computer) determines severity.
+
+# Alert levels
+ALERT_NONE = "none"          # Normal data, no alert
+ALERT_INFO = "info"          # Noteworthy but not actionable
+ALERT_CAUTION = "caution"    # Elevated — worth monitoring
+ALERT_WARNING = "warning"    # Aircraft-reported fault — send alert
+
+# CFB prefixes that indicate aircraft-reported faults
+_CFB_ALERT_PREFIXES = {
+    "#CFBFLR": ALERT_WARNING,    # Realtime Failure
+    "#CFBWRN": ALERT_WARNING,    # Warning
+    "#CFBFDE": ALERT_WARNING,    # Flight Deck Effect (crew-visible)
+    "#CFB.1/FLR": ALERT_WARNING, # Structured realtime failure
+    "#CFBECT": ALERT_CAUTION,    # Electronic Component Test fault
+    "#CFBMIL": ALERT_INFO,       # Vibration data (informational)
+    "#CFBMPF": ALERT_INFO,       # Maintenance Planning Function
+}
+
+# Keywords in CFB text that indicate faults
+_FAULT_KEYWORDS = {"FAILED", "FAULT", "INOP", "FAIL", "CHECK"}
+
+
+def classify_alert(category, parsed, text=""):
+    """Classify alert level based on aircraft-reported fault data.
+
+    Returns dict with:
+      - level: str (none/info/caution/warning)
+      - reason: str (why this alert level)
+      - details: dict (extra context for alerting)
+    """
+    text_upper = text.upper()
+    alert = {"level": ALERT_NONE, "reason": "", "details": {}}
+
+    # ── CFB prefix-based classification ──────────────────────────────
+    if category == CAT_MAINTENANCE:
+        mtype = parsed.get("type", "")
+
+        # Check for aircraft-reported fault prefixes
+        for prefix, level in _CFB_ALERT_PREFIXES.items():
+            if prefix.lstrip("#") in text_upper or prefix in text:
+                alert["level"] = level
+                alert["reason"] = f"Aircraft reported: {prefix}"
+                break
+
+        # Check for HARD severity (persistent, non-intermittent fault)
+        if "HARD" in text_upper:
+            alert["level"] = ALERT_WARNING
+            alert["reason"] = "Aircraft fault classified as HARD (persistent)"
+
+        # Check for fault keywords in CFB text
+        if alert["level"] == ALERT_NONE:
+            for kw in _FAULT_KEYWORDS:
+                if kw in text_upper:
+                    alert["level"] = ALERT_CAUTION
+                    alert["reason"] = f"Fault keyword detected: {kw}"
+                    break
+
+        # Extract fault system/component for alert details
+        system = parsed.get("system", "")
+        component = parsed.get("component", "")
+        ata = parsed.get("ata_code", "")
+        if system:
+            alert["details"]["system"] = system
+        if component:
+            alert["details"]["component"] = component
+        if ata:
+            alert["details"]["ata_code"] = ata
+
+        # Vibration assessment — relative, not absolute thresholds
+        if mtype == "cfb_vibration":
+            readings = parsed.get("vibration_readings", [])
+            for r in readings:
+                # Parse "Up 2.8" -> 2.8
+                parts = r.split()
+                if len(parts) >= 2:
+                    try:
+                        val = float(parts[-1])
+                        if val > 4.5:
+                            alert["level"] = ALERT_CAUTION
+                            alert["reason"] = f"Elevated vibration: {r} (thresholds vary by engine type)"
+                            break
+                    except ValueError:
+                        pass
+
+    # ── Engine data: relative comparison (one engine divergent) ──────
+    elif category == CAT_ENGINE:
+        etype = parsed.get("type", "")
+
+        if etype == "dfb_engine_params":
+            param_rows = parsed.get("param_rows", [])
+            for row in param_rows:
+                if len(row) == 4:
+                    avg = sum(row) / 4
+                    # Skip rows with small absolute values (trim offsets, deltas)
+                    # Only flag divergence on meaningful parameter ranges (>50 avg)
+                    if abs(avg) < 50:
+                        continue
+                    # Check if any engine diverges >20% from the average
+                    for i, val in enumerate(row):
+                        if avg != 0 and abs(val - avg) / abs(avg) > 0.20:
+                            alert["level"] = ALERT_CAUTION
+                            alert["reason"] = f"Engine {i+1} parameter diverges >20% from others (relative comparison)"
+                            alert["details"]["divergent_engine"] = i + 1
+                            alert["details"]["values"] = row
+                            alert["details"]["average"] = round(avg, 1)
+                            break
+                if alert["level"] != ALERT_NONE:
+                    break
+
+    return alert
 
 
 # ── Public API ────────────────────────────────────────────────────────────
@@ -1328,6 +1901,9 @@ def parse_and_enrich(msg):
       - category: str
       - parsed: dict with structured extracted data
       - summary: str with plain English description
+      - alert_level: str (none/info/caution/warning)
+      - alert_reason: str (why this alert level, empty if none)
+      - alert_details: dict (extra context)
     """
     result = dict(msg)  # shallow copy
     parsed = parse_acars_message(msg)
@@ -1338,4 +1914,12 @@ def parse_and_enrich(msg):
         flight=msg.get("flight", ""),
         tail=msg.get("tail", ""),
     )
+
+    # Classify alert level
+    text = msg.get("text", "") or ""
+    alert = classify_alert(parsed["category"], parsed["parsed"], text)
+    result["alert_level"] = alert["level"]
+    result["alert_reason"] = alert["reason"]
+    result["alert_details"] = alert["details"]
+
     return result
